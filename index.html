@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flags Battle</title>
+<style>
+  :root{
+    --bg:#0A1024; --panel:#121A38; --panel2:#0E1530; --line:#243266;
+    --gold:#F2C14E; --kill:#E0457B; --mint:#4FD1A5; --txt:#E6EBFA; --mut:#8695C4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --cond: "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 system-ui,-apple-system,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px;
+        display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+
+  h1{font-family:var(--cond);font-size:22px;letter-spacing:.16em;text-transform:uppercase;
+     margin:0 0 2px;font-weight:700}
+  .sub{color:var(--mut);font-size:12px;margin-bottom:14px}
+
+  .stage{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px;position:relative}
+  canvas{width:100%;display:block;border-radius:8px}
+  .hud{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;
+       color:var(--mut);letter-spacing:.08em;padding:2px 4px 8px;text-transform:uppercase}
+  .hud b{color:var(--gold);font-weight:600}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .card h2{font-family:var(--cond);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+           color:var(--mut);margin:0 0 12px;font-weight:700}
+
+  label{display:block;font-size:11px;color:var(--mut);letter-spacing:.08em;
+        text-transform:uppercase;margin:10px 0 4px}
+  input,select,button{font:inherit;width:100%;background:var(--panel2);color:var(--txt);
+        border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  input,select{font-family:var(--mono)}
+  button{cursor:pointer;font-family:var(--cond);letter-spacing:.14em;text-transform:uppercase;
+         font-weight:700;border-color:transparent;background:var(--gold);color:#14183a;transition:.15s}
+  button:hover:not(:disabled){filter:brightness(1.1)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.ghost{background:transparent;border-color:var(--line);color:var(--txt)}
+  :focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);
+      font-family:var(--mono);font-size:13px}
+  .kv:last-child{border:0}
+  .kv span:first-child{color:var(--mut);font-family:system-ui,sans-serif;font-size:12px}
+  .big{font-family:var(--mono);font-size:28px;color:var(--gold);letter-spacing:-.02em}
+  .note{font-size:11px;color:var(--mut);line-height:1.5;margin-top:10px}
+  .ok{color:var(--mint)} .bad{color:var(--kill)}
+  progress{width:100%;height:6px;margin-top:10px}
+  .quick{display:flex;gap:6px;margin-bottom:8px}
+  button.sm{padding:5px 0;font-size:11px;letter-spacing:.06em}
+  #chips{display:flex;flex-wrap:wrap;gap:4px;max-height:150px;overflow:auto;
+         background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px}
+  .chip{font-family:var(--mono);font-size:11px;padding:3px 5px;border-radius:5px;cursor:pointer;
+        background:#1A2450;color:var(--mut);border:1px solid transparent;user-select:none;line-height:1.3}
+  .chip.on{background:var(--gold);color:#14183a;font-weight:700}
+  .chip.won{background:var(--mint);color:#0A1024;font-weight:700}
+  #log{font-family:var(--mono);font-size:11px;color:var(--mut);max-height:120px;overflow:auto;
+       margin-top:10px;white-space:pre-wrap}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;
+       background:var(--mut);vertical-align:middle}
+  .dot.on{background:var(--mint)} .dot.off{background:var(--kill)}
+  #chatBox{height:190px;overflow:auto;background:var(--panel2);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font-size:12px;line-height:1.45}
+  .msg{margin-bottom:5px;word-break:break-word}
+  .msg b{color:var(--gold);font-weight:600;font-size:11px}
+  .msg.sys{color:var(--mut);font-style:italic}
+  .chatrow{display:flex;gap:6px;margin-top:8px}
+  .chatrow input{flex:1}
+  .chatrow button{width:auto;padding:9px 14px}
+  .hash{font-family:var(--mono);font-size:10px;color:var(--mut);word-break:break-all}
+  #timer{font-family:var(--mono);font-size:13px;color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <h1>Flags Battle</h1>
+    <div class="sub">Prototype — deterministic physics from a seed, odds derived from the flag count</div>
+    <div class="stage">
+      <div class="hud">
+        <div>Round <b id="hRound">—</b></div>
+        <div><b id="hAlive">—</b> / <span id="hTotal">—</span> flags</div>
+        <div>Odds <b id="hOdds">—</b>×</div>
+      </div>
+      <canvas id="cv" width="900" height="900"></canvas>
+      <div class="hud" style="padding-top:10px">
+        <div>Seed <b id="hSeed">—</b></div>
+        <div id="hState">ready</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2><span class="dot" id="netDot"></span><span id="netLabel">Offline — local demo</span></h2>
+      <div class="kv" style="margin-bottom:10px"><span>Betting closes in</span><b id="timer">—</b></div>
+      <h2 style="margin-top:14px">Bet</h2>
+      <label for="fCount">Flags in round</label>
+      <input id="fCount" type="number" min="4" max="195" value="195">
+      <label for="fEdge">House edge (%)</label>
+      <input id="fEdge" type="number" min="0" max="20" step="0.5" value="4">
+      <div class="row">
+        <div>
+          <label for="fBet">Stake per flag</label>
+          <input id="fBet" type="number" min="0.1" step="0.1" value="1">
+        </div>
+        <div>
+          <label for="fSeed">Seed (offline only)</label>
+          <input id="fSeed" type="text" placeholder="auto">
+        </div>
+      </div>
+      <label>Bet slip — pick flags</label>
+      <div class="quick">
+        <button class="ghost sm" data-pick="10">+10</button>
+        <button class="ghost sm" data-pick="50">+50</button>
+        <button class="ghost sm" data-pick="130">130</button>
+        <button class="ghost sm" data-pick="all">All</button>
+        <button class="ghost sm" data-pick="none">Clear</button>
+      </div>
+      <div id="chips"></div>
+      <div class="kv" style="margin-top:12px"><span>Payout odds</span><b id="oOdds">—</b></div>
+      <div class="kv"><span>Coverage</span><b id="oCov">—</b></div>
+      <div class="kv"><span>Total stake</span><b id="oStake">—</b></div>
+      <div class="kv"><span>Payout if hit</span><b id="oWin">—</b></div>
+      <div class="kv"><span>Net if hit</span><b id="oNet">—</b></div>
+      <div class="kv"><span>Expected loss</span><b id="oEv">—</b></div>
+      <div class="kv"><span>Slip RTP</span><b id="oRtp">—</b></div>
+      <div style="margin-top:12px"><button id="btnSpin">Run round</button></div>
+      <div style="margin-top:8px"><button id="btnSkip" class="ghost">Skip animation</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Balance</h2>
+      <div class="big" id="oBal">1 000.00</div>
+      <div class="kv" style="margin-top:10px"><span>Rounds played</span><b id="oPlayed">0</b></div>
+      <div class="kv"><span>Total staked</span><b id="oStaked">0.00</b></div>
+      <div class="kv"><span>Total paid out</span><b id="oPaid">0.00</b></div>
+      <div class="kv"><span>Actual RTP</span><b id="oRealRtp">—</b></div>
+    </div>
+
+    <div class="card" id="chatCard" hidden>
+      <h2>Live chat</h2>
+      <div id="chatBox"></div>
+      <div class="chatrow">
+        <input id="chatIn" type="text" maxlength="200" placeholder="Say something…">
+        <button id="chatSend">Send</button>
+      </div>
+      <div class="note">Messages are filtered and logged on the server.</div>
+    </div>
+
+    <div class="card" id="fairCard" hidden>
+      <h2>Provably fair</h2>
+      <div class="kv"><span>Commitment</span><b id="fHash">—</b></div>
+      <div class="kv"><span>Client seed</span><b id="fClient">—</b></div>
+      <div class="kv"><span>Nonce</span><b id="fNonce">—</b></div>
+      <div class="kv"><span>Revealed seed</span><b id="fServer">—</b></div>
+      <div class="note">Before betting opens the server publishes sha256(serverSeed).
+        After the round it reveals serverSeed, so you can check the hash matches and
+        recompute the winner yourself: seed = HMAC-SHA256(serverSeed, clientSeed:nonce).</div>
+    </div>
+
+    <div class="card">
+      <h2>Fairness test</h2>
+      <div class="row">
+        <div><label for="tN">Flags</label><input id="tN" type="number" min="4" max="80" value="32"></div>
+        <div><label for="tR">Rounds</label><input id="tR" type="number" min="100" max="200000" value="2500"></div>
+      </div>
+      <div style="margin-top:12px"><button id="btnTest">Run test</button></div>
+      <progress id="tProg" value="0" max="1" hidden></progress>
+      <div id="log"></div>
+      <div class="note">Simulates rounds headlessly and uses a chi-square test to check every flag wins equally often. If it does, odds derived from the flag count hold the configured edge.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="sim-core.js"></script>
+<script>
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let flags = [], round = null, anim = null, bal = 1000, played = 0, staked = 0, paid = 0, roundNo = 0;
+let emojiOK = true;
+
+(function detectEmoji(){
+  ctx.font = '40px system-ui';
+  emojiOK = ctx.measureText(flagEmoji('SK')).width < ctx.measureText('SK').width * 1.6;
+})();
+
+let picks = new Set();
+
+function buildFlags(n){
+  flags = ISO.slice(0, Math.min(n, ISO.length));
+  while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
+  for (const i of [...picks]) if (i >= n) picks.delete(i);
+  $('chips').innerHTML = flags.map((c,i) =>
+    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}">${emojiOK?flagEmoji(c)+' ':''}${c}</span>`
+  ).join('');
+}
+
+function markWinner(w){
+  const el = $('chips').querySelector(`[data-i="${w}"]`);
+  if (el && picks.has(w)) el.classList.add('won');
+}
+
+function refreshOdds(){
+  const n = clampN(), e = parseFloat($('fEdge').value) || 0;
+  const o = oddsFor(n, e), per = Math.max(0, parseFloat($('fBet').value) || 0);
+  const k = picks.size, stake = k*per, payout = per*o, p = k/n;
+
+  $('oOdds').textContent = o.toFixed(2) + '×';
+  $('oCov').textContent = k + ' / ' + n + '  (' + (p*100).toFixed(1) + ' %)';
+  $('oStake').textContent = stake.toFixed(2);
+  $('oWin').textContent = k ? payout.toFixed(2) : '—';
+  const net = payout - stake;
+  $('oNet').innerHTML = k
+    ? `<span class="${net>=0?'ok':'bad'}">${net>=0?'+':''}${net.toFixed(2)}</span>` : '—';
+  const ev = stake - p*payout;                    // average loss per round
+  $('oEv').textContent = k ? '−' + ev.toFixed(2) : '—';
+  $('oRtp').textContent = stake ? (p*payout/stake*100).toFixed(2) + ' %' : '—';
+  $('hOdds').textContent = o.toFixed(2);
+  $('hTotal').textContent = n;
+}
+function clampN(){
+  let n = parseInt($('fCount').value) || 4;
+  n = Math.max(4, Math.min(195, n));
+  return n;
+}
+function fmt(x){ return x.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function refreshBal(){
+  $('oBal').textContent = fmt(bal);
+  $('oPlayed').textContent = played;
+  $('oStaked').textContent = fmt(staked);
+  $('oPaid').textContent = fmt(paid);
+  $('oRealRtp').textContent = staked ? (paid/staked*100).toFixed(2)+' %' : '—';
+}
+
+/* ---------- rendering ---------- */
+function draw(){
+  const S = cv.width, C = S/2, P = C * 0.94;
+  ctx.clearRect(0,0,S,S);
+  ctx.fillStyle = '#0A1024'; ctx.fillRect(0,0,S,S);
+  if (!round) return;
+
+  const clamp = v => Math.max(-1, Math.min(1, v));
+  const gHalf = Math.acos(clamp(round.gapThreshold()));
+  const gA = Math.atan2(round.gy, round.gx);
+  const yHalf = Math.acos(clamp(YEL_THR));
+  const yA = Math.atan2(round.yy, round.yx);
+
+  // ring — drawn from the end of the gap round to its start
+  ctx.lineWidth = S*0.009; ctx.strokeStyle = RING_COLOR; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(C, C, P, gA + gHalf, gA - gHalf + Math.PI*2); ctx.stroke();
+
+  // rotating segment, spins the other way and temporarily plugs the gap
+  ctx.strokeStyle = ARC_COLOR; ctx.lineWidth = S*0.013;
+  ctx.shadowColor = ARC_COLOR; ctx.shadowBlur = S*0.022;
+  ctx.beginPath(); ctx.arc(C, C, P, yA - yHalf, yA + yHalf); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineCap = 'butt';
+
+  const fr = round.r * P;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `${Math.max(8, fr*1.5)}px system-ui`;
+  ctx.globalAlpha = 0.45;
+  for (const e of round.escapes){
+    const px = C + e.x*P, py = C + e.y*P;
+    if (emojiOK) ctx.fillText(flagEmoji(flags[e.i]), px, py);
+    else { ctx.fillStyle = '#8695C4'; ctx.fillText(flags[e.i], px, py); }
+  }
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < round.n; i++){
+    if (!round.alive[i]) continue;
+    const px = C + round.x[i]*P, py = C + round.y[i]*P;
+    if (emojiOK){
+      ctx.fillText(flagEmoji(flags[i]), px, py);
+    } else {
+      ctx.fillStyle = '#22306A';
+      ctx.fillRect(px-fr, py-fr*0.7, fr*2, fr*1.4);
+      ctx.fillStyle = '#E6EBFA';
+      ctx.font = `${Math.max(7, fr*0.9)}px ui-monospace, monospace`;
+      ctx.fillText(flags[i], px, py);
+    }
+  }
+}
+
+/* ---------- round ---------- */
+function spin(skipAnim){
+  if (anim) return;
+  const n = clampN();
+  const per = Math.max(0, parseFloat($('fBet').value) || 0);
+  const sel = [...picks];
+  if (!sel.length){ $('hState').textContent = 'empty bet slip'; return; }
+  const bet = per * sel.length;
+  if (bet > bal){ $('hState').textContent = 'insufficient balance'; return; }
+  const edge = parseFloat($('fEdge').value) || 0;
+  const odds = oddsFor(n, edge);
+  const seedIn = $('fSeed').value.trim();
+  const seed = seedIn ? (parseInt(seedIn, 10) >>> 0) : (Math.random()*4294967295) >>> 0;
+
+  buildFlags(n);
+  round = new Round(seed, n); round.trackEscapes = true;
+  roundNo++;
+  bal -= bet; staked += bet; played++;
+  $('hSeed').textContent = seed;
+  $('hRound').textContent = roundNo;
+  $('btnSpin').disabled = true;
+  $('hState').textContent = 'running';
+  refreshBal();
+
+  const settle = () => {
+    const w = round.winner();
+    const hit = picks.has(w);
+    const win = hit ? per*odds : 0;
+    bal += win; paid += win;
+    markWinner(w);
+    $('hState').innerHTML = hit
+      ? `<span class="ok">HIT ${flags[w]} · payout ${fmt(win)} · net ${win-bet>=0?'+':''}${fmt(win-bet)}</span>`
+      : `<span class="bad">winner ${flags[w]} — no hit</span>`;
+    $('btnSpin').disabled = false;
+    anim = null; refreshBal(); draw();
+  };
+
+  if (skipAnim){
+    while (!round.finished()) round.step();
+    draw(); settle(); return;
+  }
+
+  const loop = () => {
+    for (let k = 0; k < 2; k++) if (!round.finished()) round.step();
+    $('hAlive').textContent = round.aliveCount;
+    draw();
+    if (round.finished()) settle(); else anim = requestAnimationFrame(loop);
+  };
+  anim = requestAnimationFrame(loop);
+}
+
+/* ---------- fairness test ---------- */
+function runTest(){
+  const n = Math.max(4, Math.min(80, parseInt($('tN').value)||40));
+  const rounds = Math.max(100, Math.min(200000, parseInt($('tR').value)||4000));
+  const edge = parseFloat($('fEdge').value) || 0;
+  const odds = oddsFor(n, edge);
+  const wins = new Int32Array(n);
+  let done = 0, seed = (Math.random()*4294967295)>>>0;
+  const btn = $('btnTest'), prog = $('tProg'), log = $('log');
+  btn.disabled = true; prog.hidden = false; prog.value = 0; log.textContent = '';
+  const t0 = performance.now();
+
+  const chunk = () => {
+    const end = Math.min(rounds, done + Math.max(10, (rounds/60)|0));
+    for (; done < end; done++) wins[runHeadless((seed + done*2654435761) >>> 0, n)]++;
+    prog.value = done/rounds;
+    if (done < rounds){ setTimeout(chunk, 0); return; }
+
+    const E = rounds/n;
+    let chi = 0;
+    for (let i = 0; i < n; i++){ const d = wins[i]-E; chi += d*d/E; }
+    const df = n-1, sd = Math.sqrt(2*df);
+    const fair = Math.abs(chi-df) < 3*sd;
+    const rtp = (wins[0]/rounds) * odds * 100;
+    let min = Infinity, max = -Infinity, mi=0, ma=0;
+    for (let i = 0; i < n; i++){
+      if (wins[i] < min){min = wins[i]; mi=i;}
+      if (wins[i] > max){max = wins[i]; ma=i;}
+    }
+    log.innerHTML =
+      `rounds: ${rounds}  ·  flags: ${n}  ·  ${((performance.now()-t0)/1000).toFixed(1)} s\n` +
+      `expected wins per flag: ${E.toFixed(1)}\n` +
+      `lowest: ${ISO[mi]} ${min}   highest: ${ISO[ma]} ${max}\n` +
+      `chi-square: ${chi.toFixed(1)}  (df=${df}, expected ${df}±${(3*sd).toFixed(0)})\n` +
+      (fair ? `<span class="ok">✓ distribution is uniform — odds ${odds}× hold a ${edge}% edge</span>`
+            : `<span class="bad">✗ some flags are favoured — edge does not hold</span>`) + `\n` +
+      `measured RTP on a single-flag bet: ${rtp.toFixed(2)} %  (target ${(100-edge).toFixed(2)} %)`;
+    btn.disabled = false; prog.hidden = true;
+  };
+  setTimeout(chunk, 0);
+}
+
+/* ---------- init ---------- */
+['fCount','fEdge','fBet'].forEach(id => $(id).addEventListener('input', () => {
+  if (id === 'fCount') buildFlags(clampN());
+  refreshOdds();
+}));
+$('chips').addEventListener('click', ev => {
+  const el = ev.target.closest('.chip');
+  if (!el) return;
+  const i = +el.dataset.i;
+  if (picks.has(i)) picks.delete(i); else picks.add(i);
+  el.classList.toggle('on', picks.has(i));
+  el.classList.remove('won');
+  refreshOdds();
+});
+
+document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
+  const n = clampN(), m = b.dataset.pick;
+  if (m === 'none') picks.clear();
+  else if (m === 'all') picks = new Set(Array.from({length:n}, (_,i)=>i));
+  else {
+    const want = Math.min(n, +m);
+    while (picks.size < want){
+      const c = (Math.random()*n)|0;
+      if (!picks.has(c)) picks.add(c);
+    }
+  }
+  buildFlags(n); refreshOdds();
+}));
+
+$('btnSpin').addEventListener('click', () => online ? sendBet() : spin(false));
+$('btnSkip').addEventListener('click', () => { if (!online) spin(true); });
+$('btnTest').addEventListener('click', runTest);
+
+buildFlags(clampN()); refreshOdds(); refreshBal();
+round = new Round(12345, clampN()); round.trackEscapes = true;
+$('hAlive').textContent = round.aliveCount;
+$('hRound').textContent = '0'; $('hSeed').textContent = '12345';
+draw();
+
+/* =====================================================================
+   Online mode. The server is authoritative: it picks the seed, decides
+   the winner and holds balances. This file only sends intent and plays
+   back what comes down.
+
+   With no server configured the page stays in offline demo mode, so it
+   still works as a standalone build on GitHub Pages.
+   ===================================================================== */
+
+const SERVER_URL = new URLSearchParams(location.search).get('server') || '';
+let sock = null, online = false, srvConfig = null, betLocked = false, closesAt = 0;
+
+function setNet(state, label){
+  const d = $('netDot');
+  d.className = 'dot' + (state === 'on' ? ' on' : state === 'off' ? ' off' : '');
+  $('netLabel').textContent = label;
+}
+
+function sysMsg(text){
+  const box = $('chatBox'); if (!box) return;
+  const el = document.createElement('div');
+  el.className = 'msg sys'; el.textContent = text;
+  box.appendChild(el); box.scrollTop = box.scrollHeight;
+}
+
+function chatMsg(name, text){
+  const box = $('chatBox');
+  const el = document.createElement('div');
+  el.className = 'msg';
+  const b = document.createElement('b'); b.textContent = name + ' ';
+  const t = document.createElement('span'); t.textContent = text;  // never innerHTML
+  el.append(b, t);
+  box.appendChild(el);
+  while (box.children.length > 150) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+function connect(){
+  if (!SERVER_URL){ setNet('', 'Offline — local demo'); return; }
+  setNet('', 'Connecting…');
+
+  sock = io(SERVER_URL, { query: { simVersion: SIM_VERSION }, transports: ['websocket'] });
+
+  sock.on('connect', () => { online = true; setNet('on', 'Live'); });
+
+  sock.on('fatal', d => {
+    online = false;
+    setNet('off', 'Version mismatch');
+    sysMsg(`This build runs sim ${d.client}, the server runs ${d.server}. Reload to get the current client.`);
+  });
+
+  sock.on('disconnect', () => { online = false; setNet('off', 'Disconnected'); $('timer').textContent = '—'; });
+
+  sock.on('hello', d => {
+    srvConfig = d.config;
+    bal = d.you.balance;
+    $('fCount').value = d.config.flags;
+    $('fEdge').value = d.config.edgePct;
+    $('fCount').disabled = $('fEdge').disabled = $('fSeed').disabled = true;
+    $('chatCard').hidden = !d.config.chatEnabled;
+    $('fairCard').hidden = false;
+    buildFlags(d.config.flags); refreshOdds(); refreshBal();
+    if (d.round) onOpen(d.round);
+  });
+
+  sock.on('round:open', onOpen);
+
+  sock.on('round:start', d => {
+    betLocked = true;
+    $('btnSpin').disabled = true;
+    $('timer').textContent = 'running';
+    playRound(d.seed);
+  });
+
+  sock.on('round:payout', d => {
+    bal = d.balance;
+    refreshBal();
+  });
+
+  sock.on('round:result', d => {
+    $('fServer').textContent = d.serverSeed.slice(0, 20) + '…';
+    // Cross-check: our local sim must agree with what the server paid.
+    const local = runHeadless(d.seed, srvConfig.flags);
+    if (local !== d.winner){
+      setNet('off', 'Sim mismatch');
+      sysMsg('Local simulation disagreed with the server result. Payouts follow the server.');
+    }
+  });
+
+  sock.on('chat', m => chatMsg(m.name, m.text));
+}
+
+function onOpen(r){
+  betLocked = false;
+  picks.clear();
+  buildFlags(r.flags);
+  refreshOdds();
+  closesAt = r.closesAt;
+  $('btnSpin').disabled = false;
+  $('hRound').textContent = r.nonce;
+  $('fHash').textContent = r.serverSeedHash.slice(0, 20) + '…';
+  $('fClient').textContent = r.clientSeed;
+  $('fNonce').textContent = r.nonce;
+  $('fServer').textContent = 'revealed after the round';
+  $('hState').textContent = 'betting open';
+}
+
+setInterval(() => {
+  if (!online || betLocked) return;
+  const left = Math.max(0, closesAt - Date.now());
+  $('timer').textContent = left ? (left / 1000).toFixed(1) + ' s' : 'closed';
+}, 100);
+
+/* Plays the animation from the server's seed. The winner comes out of the
+   shared sim, so a drifting client is caught by the cross-check above. */
+function playRound(seed){
+  const n = srvConfig.flags;
+  round = new Round(seed, n); round.trackEscapes = true;
+  $('hSeed').textContent = seed;
+  const loop = () => {
+    for (let k = 0; k < 2; k++) if (!round.finished()) round.step();
+    $('hAlive').textContent = round.aliveCount;
+    draw();
+    if (round.finished()){
+      const w = round.winner();
+      markWinner(w);
+      $('hState').innerHTML = picks.has(w)
+        ? `<span class="ok">HIT ${flags[w]}</span>`
+        : `<span class="bad">winner ${flags[w]}</span>`;
+      anim = null;
+    } else anim = requestAnimationFrame(loop);
+  };
+  anim = requestAnimationFrame(loop);
+}
+
+function sendBet(){
+  const per = Math.max(0, parseFloat($('fBet').value) || 0);
+  if (!picks.size) { $('hState').textContent = 'empty bet slip'; return; }
+  $('btnSpin').disabled = true;
+  sock.emit('bet', { perFlag: per, picks: [...picks] }, res => {
+    if (res && res.ok){
+      bal = res.balance; refreshBal();
+      $('hState').innerHTML = `<span class="ok">bet placed — ${res.picks.length} flags</span>`;
+    } else {
+      $('btnSpin').disabled = false;
+      $('hState').innerHTML = `<span class="bad">${(res && res.msg) || 'bet rejected'}</span>`;
+    }
+  });
+}
+
+function sendChat(){
+  const el = $('chatIn'); const text = el.value.trim();
+  if (!text || !online) return;
+  sock.emit('chat', { text }, res => {
+    if (!res || !res.ok) sysMsg((res && res.msg) || 'not sent');
+  });
+  el.value = '';
+}
+
+$('chatSend').addEventListener('click', sendChat);
+$('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+connect();
+
+</script>
+</body>
+</html>
