@@ -433,8 +433,11 @@ function spin(skipAnim){
 
 /* ---------- fairness test ---------- */
 function runTest(){
-  const n = Math.max(4, Math.min(80, parseInt($('tN').value)||40));
-  const rounds = Math.max(100, Math.min(200000, parseInt($('tR').value)||4000));
+  const nIn = parseInt($('tN').value) || 40;
+  const rIn = parseInt($('tR').value) || 4000;
+  const n = Math.max(4, Math.min(80, nIn));
+  const rounds = Math.max(100, Math.min(200000, rIn));
+  const clampNote = (n !== nIn ? `  (flags clamped from ${nIn}; test range is 4–80)` : '');
   const edge = parseFloat($('fEdge').value) || 0;
   const odds = oddsFor(n, edge);
   const wins = new Int32Array(n);
@@ -454,20 +457,36 @@ function runTest(){
     for (let i = 0; i < n; i++){ const d = wins[i]-E; chi += d*d/E; }
     const df = n-1, sd = Math.sqrt(2*df);
     const fair = Math.abs(chi-df) < 3*sd;
+
+    /* RTP measured on ONE flag is a noisy estimator: a handful of wins either
+       way moves it percent. Show the 95% band so the number is readable
+       instead of looking like the edge is broken. */
+    const p = 1/n;
     const rtp = (wins[0]/rounds) * odds * 100;
+    const seRtp = Math.sqrt(p*(1-p)/rounds) * odds * 100;
+    const band = 1.96 * seRtp;
+    const target = 100 - edge;
+    const rtpOK = Math.abs(rtp - target) <= band;
+
     let min = Infinity, max = -Infinity, mi=0, ma=0;
     for (let i = 0; i < n; i++){
       if (wins[i] < min){min = wins[i]; mi=i;}
       if (wins[i] > max){max = wins[i]; ma=i;}
     }
     log.innerHTML =
-      `rounds: ${rounds}  ·  flags: ${n}  ·  ${((performance.now()-t0)/1000).toFixed(1)} s\n` +
+      `rounds: ${rounds}  ·  flags: ${n}  ·  ${((performance.now()-t0)/1000).toFixed(1)} s` +
+      `${clampNote}\n` +
       `expected wins per flag: ${E.toFixed(1)}\n` +
       `lowest: ${ISO[mi]} ${min}   highest: ${ISO[ma]} ${max}\n` +
       `chi-square: ${chi.toFixed(1)}  (df=${df}, expected ${df}±${(3*sd).toFixed(0)})\n` +
       (fair ? `<span class="ok">✓ distribution is uniform — odds ${odds}× hold a ${edge}% edge</span>`
             : `<span class="bad">✗ some flags are favoured — edge does not hold</span>`) + `\n` +
-      `measured RTP on a single-flag bet: ${rtp.toFixed(2)} %  (target ${(100-edge).toFixed(2)} %)`;
+      `single-flag RTP: ${rtp.toFixed(2)} %  (target ${target.toFixed(2)} %, ` +
+      `95% band ±${band.toFixed(2)})\n` +
+      (rtpOK ? `<span class="ok">✓ within noise for this sample size</span>`
+             : `<span class="bad">outside the band — re-run with more rounds</span>`) + `\n` +
+      `note: this tracks one flag only, so it is noisy by nature. ` +
+      `The chi-square line above uses all ${n} flags and is the reliable check.`;
     btn.disabled = false; prog.hidden = true;
   };
   setTimeout(chunk, 0);
