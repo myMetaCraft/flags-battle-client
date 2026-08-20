@@ -1,59 +1,41 @@
-# flags-battle-server — PRIVATE
+# flags-battle-client — public
 
-Authoritative game server. **This repo must stay private.** It holds the RNG,
-the payout logic and, once deployed, your credentials.
+Browser client for Flags Battle. 195 flags bounce inside a ring with a rotating
+gap; an orange segment counter-rotates and plugs the gap. Flags that escape are
+out. Last one standing wins.
 
-## Why the server decides everything
+## Two modes
 
-The browser never determines the winner. The server picks the seed, runs the
-simulation, and pays out. The client receives the seed only so it can replay
-the same round as an animation. A tampered client changes the pictures, not
-the money.
+**Offline (default).** Open `index.html` and everything runs locally with demo
+credits. Good for testing feel and for GitHub Pages.
 
-## Provably fair (commit → reveal)
+**Online.** Append the server URL:
 
-1. Before betting opens the server publishes `sha256(serverSeed)`.
-2. `clientSeed` is public and derived from the previous round's result.
-3. `roundSeed = HMAC-SHA256(serverSeed, "clientSeed:nonce")`, first 8 hex → uint32.
-4. After the round `serverSeed` is revealed.
-
-Anyone can then check the hash matches the commitment published *before* bets,
-and recompute the winner. The server cannot pick a favourable seed after seeing
-the bets, because it is locked in by the hash.
-
-## Run locally
-
-```bash
-cp .env.example .env
-npm install
-npm start
+```
+https://your-pages-url/?server=https://your-app.up.railway.app
 ```
 
-## Deploy to Railway
+The server then drives rounds, balances, payouts and chat.
 
-- New project → deploy from this repo
-- Set every variable from `.env.example` in Railway's Variables tab
-- Set `CORS_ORIGIN` to your client's URL, not `*`
-- Point the client at it: `https://your-client/?server=https://your-app.up.railway.app`
+## Maths
 
-## sim-core.js must match the client
+Odds are `floor(flags × (1 − edge))`. At 195 flags and a 4% edge that is 187.2×,
+so RTP is 96.00%. Rounding **down** matters: covering every flag stakes 195 to
+win 187.20, a guaranteed loss. Round up and players buy the whole board for a
+risk-free profit.
 
-`sim-core.js` is byte-identical to the copy in the public client repo. If they
-drift, the animation shows one winner and the server pays another. `SIM_VERSION`
-guards this: a client on a different version is rejected at connect, and every
-result is cross-checked client-side.
+Starting positions are randomised every round, so no flag is favoured. The
+built-in fairness test runs thousands of headless rounds and checks the winner
+distribution with a chi-square test.
 
-When you change the simulation, bump `SIM_VERSION` and update **both** repos.
+## sim-core.js
 
-## Before real money
+Shared, deterministic, and identical to the server's copy. Uses only `+ - * /`
+and `sqrt` — no `Math.sin`/`cos` in the simulation path — so the same seed gives
+the same winner on every device. Do not edit it here alone; bump `SIM_VERSION`
+and update the server repo too.
 
-This is a working prototype, not a production system.
+## Note
 
-- **State is in memory.** Balances and the audit trail vanish on restart. Move
-  players, bets, rounds and chat to Postgres.
-- **No accounts.** Identity is the socket id. Add real auth.
-- **Chat logs are personal data.** Set a retention period and document it.
-- **Swap the word list.** `moderation.js` ships a placeholder. The game is
-  global, so English and Slovak alone are not enough.
-- **Certification.** The RNG and the game maths need an accredited lab
-  (GLI, BMM, eCOGRA, iTech) before any licensed operator can take this.
+Flag emoji do not render on Windows; those users see ISO codes instead. That is
+a Windows font limitation, not a bug.
