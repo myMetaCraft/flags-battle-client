@@ -8,7 +8,7 @@
    result on every device and every CPU.
    ===================================================================== */
 
-const SIM_VERSION = '1.0.0';
+const SIM_VERSION = '1.1.0';
 
 /* ---------- seeded PRNG (mulberry32) ---------- */
 function mulberry32(a){
@@ -29,13 +29,13 @@ const flagEmoji = c => String.fromCodePoint(...[...c].map(ch => 0x1F1E6 + ch.cha
    so the same seed yields the same result on every device.
    Segment rotation is matrix multiplication with fixed constants — no Math.sin/cos.
 ------------------------------------------------ */
-const DT = 1/60, SPEED = 0.34;
+const DT = 1/60, SPEED = 1.25;
 // The ring gap rotates one way, the arc segment the other. Fixed constants => no Math.sin/cos.
-const GAP_C = 0.99996800003, GAP_S = 0.00799991467;   // +0.008 rad / step
-const YEL_C = 0.99990200160, YEL_S = 0.01399954270;   // -0.014 rad / step
-const GAP_T0 = 0.88, GAP_T1 = -0.45, GAP_GROW = 14;   // the gap widens over the round
-const YEL_THR = 0.76;                                 // width of the rotating segment
-const RUSH = 3.6;                                     // speed-up as flags are eliminated
+const GAP_C = 0.99875026039, GAP_S = 0.04997916927;   // +0.050 rad / step
+const YEL_C = 0.99920010666, YEL_S = 0.03998933419;   // -0.040 rad / step
+const GAP_T0 = 0.98, GAP_T1 = 0.94, GAP_GROW = 18;    // gap stays narrow: 23deg -> 40deg
+const YEL_THR = 0.93;                                 // segment 43deg — wider than the gap, so it fully plugs it
+const RUSH = 5.5;                                     // speed-up as flags are eliminated
 const ARC_COLOR = '#FF8A2B';                          // colour of the rotating segment
 const RING_COLOR = '#E6EBFA';                         // colour of the ring with the gap
 
