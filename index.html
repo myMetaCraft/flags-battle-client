@@ -188,6 +188,20 @@
 <script>
 /* ---------- UI ---------- */
 const $ = id => document.getElementById(id);
+/* sim-core.js must sit next to this file. Opening index.html on its own
+   (a file preview, a stray copy) leaves every symbol undefined and the page
+   dies with an unhelpful "Script error". Say so plainly instead. */
+if (typeof Round === 'undefined' || typeof SIM_VERSION === 'undefined'){
+  document.body.innerHTML =
+    '<div style="max-width:520px;margin:18vh auto;padding:24px;font:15px/1.6 system-ui;' +
+    'color:#E6EBFA;background:#121A38;border:1px solid #243266;border-radius:14px">' +
+    '<h2 style="margin:0 0 10px;font-size:17px">sim-core.js is missing</h2>' +
+    'This page needs <code>sim-core.js</code> in the same folder. ' +
+    'Upload both files together, or open the deployed URL rather than the file on its own.' +
+    '</div>';
+  throw new Error('sim-core.js not loaded');
+}
+
 const cv = $('cv'), ctx = cv.getContext('2d');
 let flags = [], round = null, anim = null, bal = 1000, played = 0, staked = 0, paid = 0, roundNo = 0;
 let emojiOK = true;
