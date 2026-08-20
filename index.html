@@ -61,6 +61,8 @@
         background:#1A2450;color:var(--mut);border:1px solid transparent;user-select:none;line-height:1.3}
   .chip.on{background:var(--gold);color:#14183a;font-weight:700}
   .chip.won{background:var(--mint);color:#0A1024;font-weight:700}
+  .chip .fi{width:16px;height:11px;object-fit:cover;vertical-align:-1px;margin-right:4px;
+            border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
   #log{font-family:var(--mono);font-size:11px;color:var(--mut);max-height:120px;overflow:auto;
        margin-top:10px;white-space:pre-wrap}
   .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;
@@ -190,10 +192,35 @@ const cv = $('cv'), ctx = cv.getContext('2d');
 let flags = [], round = null, anim = null, bal = 1000, played = 0, staked = 0, paid = 0, roundNo = 0;
 let emojiOK = true;
 
+/* Windows has no flag emoji at all, so the only way to show real flags
+   everywhere is to load images. These come from flagcdn.com (free, no key).
+   Each is a small PNG; 195 of them is roughly 300 kB, cached after the first
+   load. If the CDN is unreachable the coloured-code chips are used instead,
+   so the game never breaks on a failed image. */
+const FLAG_CDN = 'https://flagcdn.com/w40/';
+const flagImg = Object.create(null);
+let flagsLoaded = 0;
+
+function preloadFlags(){
+  for (const code of ISO){
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = FLAG_CDN + code.toLowerCase() + '.png';
+    img.onload = () => { flagsLoaded++; if (round) draw(); };
+    img.onerror = () => { img.failed = true; };
+    flagImg[code] = img;
+  }
+}
+
+function imgFor(code){
+  const im = flagImg[code];
+  return (im && !im.failed && im.complete && im.naturalWidth) ? im : null;
+}
+
 /* Width-based detection was wrong: Windows renders a flag emoji as the two
    regional-indicator letters, which measure about the same as the code. So
    draw one and look at the pixels instead — a real flag emoji is colourful,
-   the letter fallback is monochrome. */
+   the letter fallback is monochrome. Only used for the bet slip now. */
 (function detectEmoji(){
   try {
     const t = document.createElement('canvas');
@@ -215,10 +242,12 @@ let emojiOK = true;
   } catch (_){ emojiOK = false; }
 })();
 
+preloadFlags();
+
 let picks = new Set();
 
-/* Deterministic colour per country, used when emoji flags are unavailable.
-   A dark chip on the dark arena was invisible; this stays readable. */
+/* Deterministic colour per country, used until an image arrives or if the
+   CDN fails entirely. */
 function chipHue(code){
   let h = 0;
   for (let k = 0; k < code.length; k++) h = (h * 31 + code.charCodeAt(k)) % 360;
@@ -230,9 +259,9 @@ function buildFlags(n){
   while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
   for (const i of [...picks]) if (i >= n) picks.delete(i);
   $('chips').innerHTML = flags.map((c,i) =>
-    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}"${
-        emojiOK ? '' : ` style="border-left:3px solid hsl(${chipHue(c)} 62% 55%)"`
-      }>${emojiOK ? flagEmoji(c)+' ' : ''}${c}</span>`
+    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}">` +
+    `<img class="fi" src="${FLAG_CDN}${c.toLowerCase()}.png" alt="" loading="lazy" ` +
+    `onerror="this.style.display='none'">${c}</span>`
   ).join('');
 }
 
@@ -315,23 +344,25 @@ function draw(){
     ctx.globalAlpha = 1;
   }
 
-  for (const e of round.escapes){
-    const px = C + e.x*P, py = C + e.y*P;
-    if (emojiOK){
-      ctx.globalAlpha = 0.45;
-      ctx.font = `${Math.max(8, fr*1.5)}px system-ui`;
-      ctx.fillText(flagEmoji(flags[e.i]), px, py);
-      ctx.globalAlpha = 1;
-    } else drawChip(flags[e.i], px, py, 0.4);
+  /* Real flag image if it has arrived, otherwise the coloured code chip.
+     Aspect ratio comes from the image so flags are not stretched. */
+  function drawFlag(code, px, py, alpha){
+    const im = imgFor(code);
+    if (!im) { drawChip(code, px, py, alpha); return; }
+    const w = fr * 2.0, h = w * (im.naturalHeight / im.naturalWidth);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(im, px - w/2, py - h/2, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = Math.max(0.6, fr*0.07);
+    ctx.strokeRect(px - w/2, py - h/2, w, h);
+    ctx.globalAlpha = 1;
   }
+
+  for (const e of round.escapes) drawFlag(flags[e.i], C + e.x*P, C + e.y*P, 0.4);
 
   for (let i = 0; i < round.n; i++){
     if (!round.alive[i]) continue;
-    const px = C + round.x[i]*P, py = C + round.y[i]*P;
-    if (emojiOK){
-      ctx.font = `${Math.max(8, fr*1.5)}px system-ui`;
-      ctx.fillText(flagEmoji(flags[i]), px, py);
-    } else drawChip(flags[i], px, py, 1);
+    drawFlag(flags[i], C + round.x[i]*P, C + round.y[i]*P, 1);
   }
 }
 
