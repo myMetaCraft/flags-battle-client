@@ -190,19 +190,49 @@ const cv = $('cv'), ctx = cv.getContext('2d');
 let flags = [], round = null, anim = null, bal = 1000, played = 0, staked = 0, paid = 0, roundNo = 0;
 let emojiOK = true;
 
+/* Width-based detection was wrong: Windows renders a flag emoji as the two
+   regional-indicator letters, which measure about the same as the code. So
+   draw one and look at the pixels instead — a real flag emoji is colourful,
+   the letter fallback is monochrome. */
 (function detectEmoji(){
-  ctx.font = '40px system-ui';
-  emojiOK = ctx.measureText(flagEmoji('SK')).width < ctx.measureText('SK').width * 1.6;
+  try {
+    const t = document.createElement('canvas');
+    t.width = t.height = 24;
+    const c = t.getContext('2d', { willReadFrequently: true });
+    c.fillStyle = '#fff'; c.fillRect(0, 0, 24, 24);
+    c.fillStyle = '#000';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '18px system-ui, sans-serif';
+    c.fillText(flagEmoji('SK'), 12, 12);
+    const px = c.getImageData(0, 0, 24, 24).data;
+    let coloured = 0;
+    for (let i = 0; i < px.length; i += 4){
+      if (px[i+3] < 40) continue;
+      const r = px[i], g = px[i+1], b = px[i+2];
+      if (Math.max(r,g,b) - Math.min(r,g,b) > 28) coloured++;
+    }
+    emojiOK = coloured > 4;
+  } catch (_){ emojiOK = false; }
 })();
 
 let picks = new Set();
+
+/* Deterministic colour per country, used when emoji flags are unavailable.
+   A dark chip on the dark arena was invisible; this stays readable. */
+function chipHue(code){
+  let h = 0;
+  for (let k = 0; k < code.length; k++) h = (h * 31 + code.charCodeAt(k)) % 360;
+  return h;
+}
 
 function buildFlags(n){
   flags = ISO.slice(0, Math.min(n, ISO.length));
   while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
   for (const i of [...picks]) if (i >= n) picks.delete(i);
   $('chips').innerHTML = flags.map((c,i) =>
-    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}">${emojiOK?flagEmoji(c)+' ':''}${c}</span>`
+    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}"${
+        emojiOK ? '' : ` style="border-left:3px solid hsl(${chipHue(c)} 62% 55%)"`
+      }>${emojiOK ? flagEmoji(c)+' ' : ''}${c}</span>`
   ).join('');
 }
 
@@ -268,26 +298,40 @@ function draw(){
 
   const fr = round.r * P;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `${Math.max(8, fr*1.5)}px system-ui`;
-  ctx.globalAlpha = 0.45;
+
+  function drawChip(code, px, py, alpha){
+    const h = chipHue(code);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `hsl(${h} 62% 46%)`;
+    const w = fr * 1.9, hh = fr * 1.25;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(px - w/2, py - hh/2, w, hh, fr*0.28);
+    else ctx.rect(px - w/2, py - hh/2, w, hh);
+    ctx.fill();
+    ctx.strokeStyle = `hsl(${h} 62% 72%)`; ctx.lineWidth = Math.max(1, fr*0.09); ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `700 ${Math.max(8, fr*0.95)}px ui-monospace, Menlo, Consolas, monospace`;
+    ctx.fillText(code, px, py);
+    ctx.globalAlpha = 1;
+  }
+
   for (const e of round.escapes){
     const px = C + e.x*P, py = C + e.y*P;
-    if (emojiOK) ctx.fillText(flagEmoji(flags[e.i]), px, py);
-    else { ctx.fillStyle = '#8695C4'; ctx.fillText(flags[e.i], px, py); }
+    if (emojiOK){
+      ctx.globalAlpha = 0.45;
+      ctx.font = `${Math.max(8, fr*1.5)}px system-ui`;
+      ctx.fillText(flagEmoji(flags[e.i]), px, py);
+      ctx.globalAlpha = 1;
+    } else drawChip(flags[e.i], px, py, 0.4);
   }
-  ctx.globalAlpha = 1;
+
   for (let i = 0; i < round.n; i++){
     if (!round.alive[i]) continue;
     const px = C + round.x[i]*P, py = C + round.y[i]*P;
     if (emojiOK){
+      ctx.font = `${Math.max(8, fr*1.5)}px system-ui`;
       ctx.fillText(flagEmoji(flags[i]), px, py);
-    } else {
-      ctx.fillStyle = '#22306A';
-      ctx.fillRect(px-fr, py-fr*0.7, fr*2, fr*1.4);
-      ctx.fillStyle = '#E6EBFA';
-      ctx.font = `${Math.max(7, fr*0.9)}px ui-monospace, monospace`;
-      ctx.fillText(flags[i], px, py);
-    }
+    } else drawChip(flags[i], px, py, 1);
   }
 }
 
