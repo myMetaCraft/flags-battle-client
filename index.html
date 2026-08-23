@@ -53,6 +53,14 @@
   .note{font-size:11px;color:var(--mut);line-height:1.5;margin-top:10px}
   .ok{color:var(--mint)} .bad{color:var(--kill)}
   progress{width:100%;height:6px;margin-top:10px}
+  .strip{display:flex;flex-wrap:wrap;align-items:center;gap:10px 26px;margin-top:14px;
+         background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px}
+  .strip span{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+              color:var(--mut);margin-bottom:3px}
+  .strip b{font-family:var(--mono);font-size:14px;font-weight:600}
+  .strip-main{padding-right:26px;border-right:1px solid var(--line)}
+  .strip-main b{font-size:24px;color:var(--gold);letter-spacing:-.02em}
+  @media(max-width:520px){ .strip-main{border-right:0;width:100%} }
   .quick{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
   .quick button{flex:1 1 44px}
   button.sm{padding:5px 0;font-size:11px;letter-spacing:.06em}
@@ -91,7 +99,6 @@
 
   <div>
     <h1>Flags Battle</h1>
-    <div class="sub">Prototype — deterministic physics from a seed, odds derived from the flag count</div>
     <div class="stage">
       <div class="hud">
         <div>Round <b id="hRound">—</b></div>
@@ -103,6 +110,16 @@
         <div>Seed <b id="hSeed">—</b></div>
         <div id="hState">ready</div>
       </div>
+    </div>
+
+    <div class="strip">
+      <div class="strip-main">
+        <span>Balance</span>
+        <b id="oBal">1,000.00</b>
+      </div>
+      <div class="strip-item"><span>Rounds played</span><b id="oPlayed">0</b></div>
+      <div class="strip-item"><span>Total staked</span><b id="oStaked">0.00</b></div>
+      <div class="strip-item"><span>Total paid out</span><b id="oPaid">0.00</b></div>
     </div>
   </div>
 
@@ -147,15 +164,6 @@
       <div class="kv"><span>Slip RTP</span><b id="oRtp">—</b></div>
       <div style="margin-top:12px"><button id="btnSpin">Run round</button></div>
       <div style="margin-top:8px"><button id="btnSkip" class="ghost">Skip animation</button></div>
-    </div>
-
-    <div class="card">
-      <h2>Balance</h2>
-      <div class="big" id="oBal">1 000.00</div>
-      <div class="kv" style="margin-top:10px"><span>Rounds played</span><b id="oPlayed">0</b></div>
-      <div class="kv"><span>Total staked</span><b id="oStaked">0.00</b></div>
-      <div class="kv"><span>Total paid out</span><b id="oPaid">0.00</b></div>
-      <div class="kv"><span>Actual RTP</span><b id="oRealRtp">—</b></div>
     </div>
 
     <div class="card" id="roomCard" hidden>
@@ -409,7 +417,6 @@ function refreshBal(){
   $('oPlayed').textContent = played;
   $('oStaked').textContent = fmt(staked);
   $('oPaid').textContent = fmt(paid);
-  $('oRealRtp').textContent = staked ? (paid/staked*100).toFixed(2)+' %' : '—';
 }
 
 /* ---------- rendering ---------- */
