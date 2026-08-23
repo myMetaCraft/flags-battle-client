@@ -315,6 +315,39 @@ let myId = null;
 
 let picks = new Set();
 
+/* ---------- slot layout ----------
+   The RGS settles on `winnerIndex < coverage`: it assumes the player's flags
+   sit in sim slots 0..k-1. The player picks freely, so the client has to
+   arrange the board to match — picked flags take the low slots, the rest fill
+   in behind them.
+
+   This does not touch the physics. A slot is only a label; the simulation
+   depends on the seed and the flag count, nothing else. And because the
+   winning slot is uniform, moving a flag to a low slot neither helps nor
+   hurts it. Without this the animation can crown a flag the player never
+   picked while the RGS pays the bet as a hit.
+
+   Locked while a round is in flight so the board cannot be relabelled
+   mid-animation. */
+let slotFlag = [];        // slotFlag[s] = country code drawn at sim slot s
+let slotChip = [];        // slotChip[s] = index of that flag in the chip list
+let slotsLocked = false;
+let lockedK = 0;          // coverage the round was actually bet at
+
+function buildSlots(){
+  if (slotsLocked) return;
+  if (customFlags){
+    // Private rooms: one flag per player, so the winning index already names
+    // a player. Any permutation here would point at the wrong person.
+    slotChip = flags.map((_, i) => i);
+  } else {
+    const sel  = [...picks].sort((a,b) => a-b);
+    const rest = flags.map((_, i) => i).filter(i => !picks.has(i));
+    slotChip = sel.concat(rest);
+  }
+  slotFlag = slotChip.map(i => flags[i]);
+}
+
 /* Which of the seven counts are reachable at the current field size. With
    fewer than 98 flags in play, the larger books simply cannot be filled. */
 function validCounts(n){ return MODES.filter(m => m <= n); }
@@ -356,6 +389,7 @@ function buildFlags(n){
     `<img class="fi" src="${FLAG_CDN}${c.toLowerCase()}.png" alt="" loading="lazy" ` +
     `onerror="this.style.display='none'">${c}</span>`
   ).join('');
+  buildSlots();
   renderPicked();
 }
 
@@ -404,15 +438,19 @@ function checkSlip(){
   return ok;
 }
 
+/* `w` is a sim slot, not a chip index. Map it back before highlighting. */
 function markWinner(w){
-  const el = $('chips').querySelector(`[data-i="${w}"]`);
-  if (el && picks.has(w)) el.classList.add('won');
+  const ci = slotChip[w];
+  if (ci === undefined) return;
+  const el = $('chips').querySelector(`[data-i="${ci}"]`);
+  if (el && picks.has(ci)) el.classList.add('won');
 }
 
 /* Every picked flag is its own independent bet at the single-flag odds.
    Coverage does not change the odds, it changes how much is staked. Each
    flag carries the same edge, so the return is the same at any coverage. */
 function refreshOdds(){
+  buildSlots();
   const n = clampN(), e = HOUSE_EDGE;
   const per = Math.max(0, parseFloat($('fBet').value) || 0);
   const k = picks.size, p = k/n;
@@ -503,11 +541,11 @@ function draw(){
     ctx.globalAlpha = 1;
   }
 
-  for (const e of round.escapes) drawFlag(flags[e.i], C + e.x*P, C + e.y*P, 0.4);
+  for (const e of round.escapes) drawFlag(slotFlag[e.i], C + e.x*P, C + e.y*P, 0.4);
 
   for (let i = 0; i < round.n; i++){
     if (!round.alive[i]) continue;
-    drawFlag(flags[i], C + round.x[i]*P, C + round.y[i]*P, 1);
+    drawFlag(slotFlag[i], C + round.x[i]*P, C + round.y[i]*P, 1);
   }
 }
 
@@ -530,6 +568,8 @@ function spin(skipAnim){
   const seed = seedIn ? (parseInt(seedIn, 10) >>> 0) : (Math.random()*4294967295) >>> 0;
 
   buildFlags(n);
+  lockedK = sel.length;
+  slotsLocked = true;          // freeze the board for the duration of the round
   round = new Round(seed, n); round.trackEscapes = true;
   roundNo++;
   bal -= bet; staked += bet; played++;
@@ -541,14 +581,17 @@ function spin(skipAnim){
 
   const settle = () => {
     const w = round.winner();
-    const hit = picks.has(w);
+    // Same rule the RGS uses, so the animation and the payout cannot disagree.
+    const hit = w < lockedK;
+    const code = slotFlag[w];
     const win = hit ? per*odds : 0;
     bal += win; paid += win;
     markWinner(w);
     $('hState').innerHTML = hit
-      ? `<span class="ok">HIT ${NAMES[flags[w]] || flags[w]} · payout ${fmt(win)} · net ${win-bet>=0?'+':''}${fmt(win-bet)}</span>`
-      : `<span class="bad">winner ${NAMES[flags[w]] || flags[w]} — no hit</span>`;
+      ? `<span class="ok">HIT ${NAMES[code] || code} · payout ${fmt(win)} · net ${win-bet>=0?'+':''}${fmt(win-bet)}</span>`
+      : `<span class="bad">winner ${NAMES[code] || code} — no hit</span>`;
     $('btnSpin').disabled = false;
+    slotsLocked = false;
     anim = null; refreshBal(); draw();
   };
 
@@ -574,6 +617,7 @@ function spin(skipAnim){
 
 /* Free-form: add or remove any flag. Nothing here caps the slip. */
 $('chips').addEventListener('click', ev => {
+  if (slotsLocked) return;
   const el = ev.target.closest('.chip');
   if (!el) return;
   const i = +el.dataset.i;
@@ -587,6 +631,7 @@ $('chips').addEventListener('click', ev => {
    random flags. Ignoring the buttons entirely is a perfectly valid way to
    play — hand-pick whatever you want, as long as the count lands on a book. */
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  if (slotsLocked) return;
   const n = clampN(), k = +b.dataset.mode;
   if (k > n) return;
   picks = randomPicks(k, n);
@@ -596,6 +641,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click'
 /* Re-roll: keeps the count the player already has if it is payable, otherwise
    picks one of the seven at random and fills that. */
 document.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
+  if (slotsLocked) return;
   const n = clampN();
   if (b.dataset.fill === 'clear'){
     picks.clear();
@@ -730,6 +776,7 @@ function connect(){
 
 function onOpen(r){
   betLocked = false;
+  slotsLocked = false; lockedK = 0;
   picks.clear();
   buildFlags(r.flags);
   refreshOdds();
@@ -762,9 +809,11 @@ function playRound(seed){
     if (round.finished()){
       const w = round.winner();
       markWinner(w);
-      $('hState').innerHTML = picks.has(w)
-        ? `<span class="ok">HIT ${flags[w]}</span>`
-        : `<span class="bad">winner ${flags[w]}</span>`;
+      const code = slotFlag[w];
+      $('hState').innerHTML = w < lockedK
+        ? `<span class="ok">HIT ${NAMES[code] || code}</span>`
+        : `<span class="bad">winner ${NAMES[code] || code}</span>`;
+      slotsLocked = false;
       anim = null;
     } else anim = requestAnimationFrame(loop);
   };
@@ -783,6 +832,8 @@ function sendBet(){
   sock.emit('bet', { perFlag, betMode: picks.size, picks: [...picks] }, res => {
     if (res && res.ok){
       bal = res.balance; refreshBal();
+      lockedK = picks.size;
+      slotsLocked = true;      // the board is now what the server will settle against
       $('hState').innerHTML = `<span class="ok">bet placed — ${res.picks.length} flags</span>`;
     } else {
       $('btnSpin').disabled = false;
@@ -887,8 +938,10 @@ function wireRooms(){
    index names a player directly. */
 function playRoomRound(d){
   customFlags = d.flagCodes;
-  buildFlags(d.flagCodes.length);
+  slotsLocked = false; lockedK = 0;
   picks.clear();
+  buildFlags(d.flagCodes.length);
+  slotsLocked = true;
   round = new Round(d.seed, d.flagCodes.length);
   round.trackEscapes = true;
   $('hSeed').textContent = d.seed;
