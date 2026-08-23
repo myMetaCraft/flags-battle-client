@@ -53,7 +53,8 @@
   .note{font-size:11px;color:var(--mut);line-height:1.5;margin-top:10px}
   .ok{color:var(--mint)} .bad{color:var(--kill)}
   progress{width:100%;height:6px;margin-top:10px}
-  .quick{display:flex;gap:6px;margin-bottom:8px}
+  .quick{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+  .quick button{flex:1 1 44px}
   button.sm{padding:5px 0;font-size:11px;letter-spacing:.06em}
   #chips{display:flex;flex-wrap:wrap;gap:4px;max-height:150px;overflow:auto;
          background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px}
@@ -61,6 +62,11 @@
         background:#1A2450;color:var(--mut);border:1px solid transparent;user-select:none;line-height:1.3}
   .chip.on{background:var(--gold);color:#14183a;font-weight:700}
   .chip.won{background:var(--mint);color:#0A1024;font-weight:700}
+  .chip.full{opacity:.35;cursor:not-allowed}
+  button.mode.active{background:var(--gold);color:#14183a;border-color:transparent}
+  #picked{margin-top:8px;font-size:11px;color:var(--mut);line-height:1.6;
+          max-height:78px;overflow:auto}
+  #picked b{color:var(--txt);font-weight:600}
   .chip .fi{width:16px;height:11px;object-fit:cover;vertical-align:-1px;margin-right:4px;
             border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
   #log{font-family:var(--mono);font-size:11px;color:var(--mut);max-height:120px;overflow:auto;
@@ -119,15 +125,21 @@
           <input id="fSeed" type="text" placeholder="auto">
         </div>
       </div>
-      <label>Bet slip — pick flags</label>
+      <label>Bet mode — how many flags</label>
       <div class="quick">
-        <button class="ghost sm" data-pick="10">+10</button>
-        <button class="ghost sm" data-pick="50">+50</button>
-        <button class="ghost sm" data-pick="130">130</button>
-        <button class="ghost sm" data-pick="all">All</button>
-        <button class="ghost sm" data-pick="none">Clear</button>
+        <button class="ghost sm mode" data-mode="1">1</button>
+        <button class="ghost sm mode" data-mode="8">8</button>
+        <button class="ghost sm mode" data-mode="17">17</button>
+        <button class="ghost sm mode" data-mode="28">28</button>
+        <button class="ghost sm mode" data-mode="53">53</button>
+        <button class="ghost sm mode" data-mode="88">88</button>
+        <button class="ghost sm mode" data-mode="98">98</button>
+        <button class="ghost sm" data-fill="random">Fill randomly</button>
+        <button class="ghost sm" data-fill="clear">Clear</button>
       </div>
+      <div id="modeNote" class="note" style="margin:0 0 8px"></div>
       <div id="chips"></div>
+      <div id="picked"></div>
       <div class="kv" style="margin-top:12px"><span>Payout odds</span><b id="oOdds">—</b></div>
       <div class="kv"><span>Coverage</span><b id="oCov">—</b></div>
       <div class="kv"><span>Total stake</span><b id="oStake">—</b></div>
@@ -146,6 +158,38 @@
       <div class="kv"><span>Total staked</span><b id="oStaked">0.00</b></div>
       <div class="kv"><span>Total paid out</span><b id="oPaid">0.00</b></div>
       <div class="kv"><span>Actual RTP</span><b id="oRealRtp">—</b></div>
+    </div>
+
+    <div class="card" id="roomCard" hidden>
+      <h2>Private room</h2>
+      <div id="roomLobby">
+        <label for="rName">Your name</label>
+        <input id="rName" type="text" maxlength="16" placeholder="name">
+        <div class="row">
+          <div><label for="rStake">Stake each</label><input id="rStake" type="number" min="1" value="10"></div>
+          <div><label for="rCode">Room code</label><input id="rCode" type="text" maxlength="5" placeholder="ABC12"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="rCreate">Create</button>
+          <button id="rJoin" class="ghost">Join</button>
+        </div>
+      </div>
+
+      <div id="roomInfo" hidden>
+        <div class="kv"><span>Room code</span><b id="rCodeOut">—</b></div>
+        <div class="kv"><span>Stake each</span><b id="rStakeOut">—</b></div>
+        <div class="kv"><span>Pot</span><b id="rPot">—</b></div>
+        <div class="kv"><span>Winner takes</span><b id="rTakes">—</b></div>
+        <label>Players</label>
+        <div id="rPlayers"></div>
+        <label for="rFlag">Your flag</label>
+        <select id="rFlag"></select>
+        <div class="row" style="margin-top:12px">
+          <button id="rReady">Ready</button>
+          <button id="rLeave" class="ghost">Leave</button>
+        </div>
+        <div class="note" id="rNote"></div>
+      </div>
     </div>
 
     <div class="card" id="chatCard" hidden>
@@ -258,6 +302,15 @@ function imgFor(code){
 
 preloadFlags();
 
+const NAMES = {"AF":"Afghanistan","AL":"Albania","DZ":"Algeria","AD":"Andorra","AO":"Angola","AG":"Antigua and Barbuda","AR":"Argentina","AM":"Armenia","AU":"Australia","AT":"Austria","AZ":"Azerbaijan","BS":"Bahamas","BH":"Bahrain","BD":"Bangladesh","BB":"Barbados","BY":"Belarus","BE":"Belgium","BZ":"Belize","BJ":"Benin","BT":"Bhutan","BO":"Bolivia","BA":"Bosnia and Herzegovina","BW":"Botswana","BR":"Brazil","BN":"Brunei","BG":"Bulgaria","BF":"Burkina Faso","BI":"Burundi","CV":"Cabo Verde","KH":"Cambodia","CM":"Cameroon","CA":"Canada","CF":"Central African Republic","TD":"Chad","CL":"Chile","CN":"China","CO":"Colombia","KM":"Comoros","CG":"Congo","CD":"DR Congo","CR":"Costa Rica","CI":"Ivory Coast","HR":"Croatia","CU":"Cuba","CY":"Cyprus","CZ":"Czechia","DK":"Denmark","DJ":"Djibouti","DM":"Dominica","DO":"Dominican Republic","EC":"Ecuador","EG":"Egypt","SV":"El Salvador","GQ":"Equatorial Guinea","ER":"Eritrea","EE":"Estonia","SZ":"Eswatini","ET":"Ethiopia","FJ":"Fiji","FI":"Finland","FR":"France","GA":"Gabon","GM":"Gambia","GE":"Georgia","DE":"Germany","GH":"Ghana","GR":"Greece","GD":"Grenada","GT":"Guatemala","GN":"Guinea","GW":"Guinea-Bissau","GY":"Guyana","HT":"Haiti","HN":"Honduras","HU":"Hungary","IS":"Iceland","IN":"India","ID":"Indonesia","IR":"Iran","IQ":"Iraq","IE":"Ireland","IL":"Israel","IT":"Italy","JM":"Jamaica","JP":"Japan","JO":"Jordan","KZ":"Kazakhstan","KE":"Kenya","KI":"Kiribati","KP":"North Korea","KR":"South Korea","KW":"Kuwait","KG":"Kyrgyzstan","LA":"Laos","LV":"Latvia","LB":"Lebanon","LS":"Lesotho","LR":"Liberia","LY":"Libya","LI":"Liechtenstein","LT":"Lithuania","LU":"Luxembourg","MG":"Madagascar","MW":"Malawi","MY":"Malaysia","MV":"Maldives","ML":"Mali","MT":"Malta","MH":"Marshall Islands","MR":"Mauritania","MU":"Mauritius","MX":"Mexico","FM":"Micronesia","MD":"Moldova","MC":"Monaco","MN":"Mongolia","ME":"Montenegro","MA":"Morocco","MZ":"Mozambique","MM":"Myanmar","NA":"Namibia","NR":"Nauru","NP":"Nepal","NL":"Netherlands","NZ":"New Zealand","NI":"Nicaragua","NE":"Niger","NG":"Nigeria","MK":"North Macedonia","NO":"Norway","OM":"Oman","PK":"Pakistan","PW":"Palau","PS":"Palestine","PA":"Panama","PG":"Papua New Guinea","PY":"Paraguay","PE":"Peru","PH":"Philippines","PL":"Poland","PT":"Portugal","QA":"Qatar","RO":"Romania","RU":"Russia","RW":"Rwanda","KN":"Saint Kitts and Nevis","LC":"Saint Lucia","VC":"Saint Vincent and the Grenadines","WS":"Samoa","SM":"San Marino","ST":"Sao Tome and Principe","SA":"Saudi Arabia","SN":"Senegal","RS":"Serbia","SC":"Seychelles","SL":"Sierra Leone","SG":"Singapore","SK":"Slovakia","SI":"Slovenia","SB":"Solomon Islands","SO":"Somalia","ZA":"South Africa","SS":"South Sudan","ES":"Spain","LK":"Sri Lanka","SD":"Sudan","SR":"Suriname","SE":"Sweden","CH":"Switzerland","SY":"Syria","TJ":"Tajikistan","TZ":"Tanzania","TH":"Thailand","TL":"Timor-Leste","TG":"Togo","TO":"Tonga","TT":"Trinidad and Tobago","TN":"Tunisia","TR":"Turkey","TM":"Turkmenistan","TV":"Tuvalu","UG":"Uganda","UA":"Ukraine","AE":"United Arab Emirates","GB":"United Kingdom","US":"United States","UY":"Uruguay","UZ":"Uzbekistan","VU":"Vanuatu","VA":"Vatican City","VE":"Venezuela","VN":"Vietnam","YE":"Yemen","ZM":"Zambia","ZW":"Zimbabwe"};
+
+/* Coverage is not free-form. Only these seven bet modes exist, matching the
+   seven books published to the RGS. A slip with 7 or 9 flags has no book
+   behind it, so the round cannot be run at all — the UI enforces that here
+   and the server enforces it again on its own. */
+const MODES = [1, 8, 17, 28, 53, 88, 98];
+let betMode = 1;
+
 let picks = new Set();
 
 /* Deterministic colour per country, used until an image arrives or if the
@@ -268,15 +321,52 @@ function chipHue(code){
   return h;
 }
 
+let customFlags = null;   // set during a private-room round
+
 function buildFlags(n){
-  flags = ISO.slice(0, Math.min(n, ISO.length));
-  while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
+  if (customFlags){
+    flags = customFlags.slice();
+  } else {
+    flags = ISO.slice(0, Math.min(n, ISO.length));
+    while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
+  }
   for (const i of [...picks]) if (i >= n) picks.delete(i);
+  const full = picks.size >= betMode;
   $('chips').innerHTML = flags.map((c,i) =>
-    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}">` +
+    `<span class="chip${picks.has(i)?' on':(full?' full':'')}" data-i="${i}" ` +
+    `title="${NAMES[c] || c}">` +
     `<img class="fi" src="${FLAG_CDN}${c.toLowerCase()}.png" alt="" loading="lazy" ` +
     `onerror="this.style.display='none'">${c}</span>`
   ).join('');
+  renderPicked();
+}
+
+/* Full country names for whatever is on the slip, so the player is never
+   looking at bare two-letter codes. */
+function renderPicked(){
+  const box = $('picked');
+  if (!box) return;
+  if (!picks.size){ box.innerHTML = ''; return; }
+  const list = [...picks].sort((a,b)=>a-b)
+    .map(i => `<b>${NAMES[flags[i]] || flags[i]}</b>`).join(', ');
+  box.innerHTML = list;
+}
+
+/* The Run button stays disabled unless the slip holds exactly the mode's
+   count. Seven or nine flags is not a bet that exists. */
+function checkSlip(){
+  const need = betMode, have = picks.size;
+  const note = $('modeNote'), btn = $('btnSpin');
+  const ok = have === need;
+  if (note){
+    note.innerHTML = ok
+      ? `<span class="ok">Ready — ${need} flag${need>1?'s':''} selected</span>`
+      : have < need
+        ? `Select ${need - have} more (mode: ${need} flag${need>1?'s':''})`
+        : `Too many — remove ${have - need}`;
+  }
+  if (btn && !online) btn.disabled = !ok;
+  return ok;
 }
 
 function markWinner(w){
@@ -284,10 +374,16 @@ function markWinner(w){
   if (el && picks.has(w)) el.classList.add('won');
 }
 
+/* Every picked flag is its own independent bet at the single-flag odds.
+   Coverage does not change the odds, it changes how much is staked. Each
+   flag carries the same edge, so slip RTP is 96% at any coverage. */
 function refreshOdds(){
   const n = clampN(), e = parseFloat($('fEdge').value) || 0;
-  const o = oddsFor(n, e), per = Math.max(0, parseFloat($('fBet').value) || 0);
-  const k = picks.size, stake = k*per, payout = per*o, p = k/n;
+  const per = Math.max(0, parseFloat($('fBet').value) || 0);
+  const k = picks.size, p = k/n;
+  const o = oddsFor(n, e);          // fixed: every flag is its own bet
+  const stake = per * k;
+  const payout = per * o;           // only one flag can win
 
   $('oOdds').textContent = o.toFixed(2) + '×';
   $('oCov').textContent = k + ' / ' + n + '  (' + (p*100).toFixed(1) + ' %)';
@@ -301,6 +397,8 @@ function refreshOdds(){
   $('oRtp').textContent = stake ? (p*payout/stake*100).toFixed(2) + ' %' : '—';
   $('hOdds').textContent = o.toFixed(2);
   $('hTotal').textContent = n;
+  renderPicked();
+  checkSlip();
 }
 function clampN(){
   let n = parseInt($('fCount').value) || 4;
@@ -384,9 +482,12 @@ function draw(){
 function spin(skipAnim){
   if (anim) return;
   const n = clampN();
-  const per = Math.max(0, parseFloat($('fBet').value) || 0);
   const sel = [...picks];
-  if (!sel.length){ $('hState').textContent = 'empty bet slip'; return; }
+  if (sel.length !== betMode){
+    $('hState').innerHTML = `<span class="bad">bet mode is ${betMode} flags, slip has ${sel.length}</span>`;
+    return;
+  }
+  const per = Math.max(0, parseFloat($('fBet').value) || 0);
   const bet = per * sel.length;
   if (bet > bal){ $('hState').textContent = 'insufficient balance'; return; }
   const edge = parseFloat($('fEdge').value) || 0;
@@ -411,8 +512,8 @@ function spin(skipAnim){
     bal += win; paid += win;
     markWinner(w);
     $('hState').innerHTML = hit
-      ? `<span class="ok">HIT ${flags[w]} · payout ${fmt(win)} · net ${win-bet>=0?'+':''}${fmt(win-bet)}</span>`
-      : `<span class="bad">winner ${flags[w]} — no hit</span>`;
+      ? `<span class="ok">HIT ${NAMES[flags[w]] || flags[w]} · payout ${fmt(win)} · net ${win-bet>=0?'+':''}${fmt(win-bet)}</span>`
+      : `<span class="bad">winner ${NAMES[flags[w]] || flags[w]} — no hit</span>`;
     $('btnSpin').disabled = false;
     anim = null; refreshBal(); draw();
   };
@@ -501,23 +602,32 @@ $('chips').addEventListener('click', ev => {
   const el = ev.target.closest('.chip');
   if (!el) return;
   const i = +el.dataset.i;
-  if (picks.has(i)) picks.delete(i); else picks.add(i);
+  if (picks.has(i)) {
+    picks.delete(i);
+  } else {
+    // Never let the slip exceed the mode: a coverage with no book behind it
+    // could not be paid out.
+    if (picks.size >= betMode) return;
+    picks.add(i);
+  }
   el.classList.toggle('on', picks.has(i));
   el.classList.remove('won');
   refreshOdds();
 });
 
-document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
-  const n = clampN(), m = b.dataset.pick;
-  if (m === 'none') picks.clear();
-  else if (m === 'all') picks = new Set(Array.from({length:n}, (_,i)=>i));
-  else {
-    const want = Math.min(n, +m);
-    while (picks.size < want){
-      const c = (Math.random()*n)|0;
-      if (!picks.has(c)) picks.add(c);
-    }
-  }
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  betMode = +b.dataset.mode;
+  picks.clear();
+  document.querySelectorAll('.mode').forEach(x =>
+    x.classList.toggle('active', +x.dataset.mode === betMode));
+  buildFlags(clampN()); refreshOdds();
+}));
+
+document.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
+  const n = clampN();
+  picks.clear();
+  if (b.dataset.fill === 'random')
+    while (picks.size < Math.min(n, betMode)) picks.add((Math.random()*n)|0);
   buildFlags(n); refreshOdds();
 }));
 
@@ -525,6 +635,8 @@ $('btnSpin').addEventListener('click', () => online ? sendBet() : spin(false));
 $('btnSkip').addEventListener('click', () => { if (!online) spin(true); });
 $('btnTest').addEventListener('click', runTest);
 
+document.querySelectorAll('.mode').forEach(x =>
+  x.classList.toggle('active', +x.dataset.mode === betMode));
 buildFlags(clampN()); refreshOdds(); refreshBal();
 round = new Round(12345, clampN()); round.trackEscapes = true;
 $('hAlive').textContent = round.aliveCount;
@@ -542,6 +654,7 @@ draw();
 
 const SERVER_URL = new URLSearchParams(location.search).get('server') || '';
 let sock = null, online = false, srvConfig = null, betLocked = false, closesAt = 0;
+let myId = null;
 
 function setNet(state, label){
   const d = $('netDot');
@@ -586,7 +699,10 @@ function connect(){
 
   sock.on('hello', d => {
     srvConfig = d.config;
+    myId = d.you.id;
     bal = d.you.balance;
+    $('rName').value = d.you.name;
+    $('roomCard').hidden = false;
     $('fCount').value = d.config.flags;
     $('fEdge').value = d.config.edgePct;
     $('fCount').disabled = $('fEdge').disabled = $('fSeed').disabled = true;
@@ -621,6 +737,20 @@ function connect(){
   });
 
   sock.on('chat', m => chatMsg(m.name, m.text));
+
+  sock.on('room:state',  r => { if (myRoom || r) renderRoom(r); });
+  sock.on('room:start',  d => playRoomRound(d));
+  sock.on('balance',     d => { bal = d.balance; refreshBal(); });
+  sock.on('room:result', d => {
+    const won = d.winnerId === myId;
+    $('hState').innerHTML = won
+      ? `<span class="ok">YOU WIN ${d.payout.toFixed(2)} — ${d.winnerFlag}</span>`
+      : `<span class="bad">${escapeHtml(d.winnerName)} wins with ${d.winnerFlag}</span>`;
+    $('rNote').textContent =
+      `Pot ${d.pot.toFixed(2)} · rake ${d.rake.toFixed(2)} · payout ${d.payout.toFixed(2)}`;
+    $('fServer').textContent = d.serverSeed.slice(0, 20) + '…';
+    customFlags = null;
+  });
 }
 
 function onOpen(r){
@@ -667,10 +797,13 @@ function playRound(seed){
 }
 
 function sendBet(){
-  const per = Math.max(0, parseFloat($('fBet').value) || 0);
-  if (!picks.size) { $('hState').textContent = 'empty bet slip'; return; }
+  const perFlag = Math.max(0, parseFloat($('fBet').value) || 0);
+  if (picks.size !== betMode){
+    $('hState').innerHTML = `<span class="bad">bet mode is ${betMode} flags, slip has ${picks.size}</span>`;
+    return;
+  }
   $('btnSpin').disabled = true;
-  sock.emit('bet', { perFlag: per, picks: [...picks] }, res => {
+  sock.emit('bet', { perFlag, betMode, picks: [...picks] }, res => {
     if (res && res.ok){
       bal = res.balance; refreshBal();
       $('hState').innerHTML = `<span class="ok">bet placed — ${res.picks.length} flags</span>`;
@@ -693,6 +826,109 @@ function sendChat(){
 $('chatSend').addEventListener('click', sendChat);
 $('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
 
+/* ---------- private rooms ----------
+   Peer to peer: everyone stakes the same, one flag each, winner takes the
+   pot minus rake. The round itself is the same simulation, just with the
+   players' chosen flags instead of the full 195. */
+let myRoom = null, myReady = false;
+
+function fillFlagPicker(taken){
+  const sel = $('rFlag');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— pick a flag —</option>' +
+    ISO.map(c => {
+      const used = taken.includes(c) && c !== cur;
+      return `<option value="${c}"${used ? ' disabled' : ''}>${c}${used ? ' (taken)' : ''}</option>`;
+    }).join('');
+  if (cur) sel.value = cur;
+}
+
+function renderRoom(room){
+  myRoom = room;
+  $('roomLobby').hidden = true;
+  $('roomInfo').hidden = false;
+  $('rCodeOut').textContent  = room.code;
+  $('rStakeOut').textContent = room.stake.toFixed(2);
+  $('rPot').textContent      = room.pot.toFixed(2);
+  $('rTakes').textContent    = (room.pot * (1 - room.rakePct/100)).toFixed(2)
+                             + `  (rake ${room.rakePct}%)`;
+
+  const me = room.players.find(p => p.id === myId);
+  myReady = !!(me && me.ready);
+  $('rReady').textContent = myReady ? 'Not ready' : 'Ready';
+  if (me && me.flag) $('rFlag').value = me.flag;
+
+  $('rPlayers').innerHTML = room.players.map(p =>
+    `<div class="kv"><span>${p.ready ? '✓' : '·'} ${escapeHtml(p.name)}` +
+    `${p.id === room.host ? ' (host)' : ''}</span><b>${p.flag || '—'}</b></div>`
+  ).join('');
+
+  fillFlagPicker(room.players.filter(p => p.flag).map(p => p.flag));
+
+  const waiting = room.players.length < room.minPlayers;
+  $('rNote').textContent = waiting
+    ? `Waiting for players — ${room.minPlayers} needed to start.`
+    : 'Round starts as soon as everyone is ready.';
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function roomCall(ev, data){
+  if (!online) { $('rNote').textContent = 'Connect to a server first.'; return; }
+  sock.emit(ev, data, res => {
+    if (res && res.ok){
+      if (res.room) renderRoom(res.room);
+    } else {
+      $('rNote').textContent = (res && res.msg) || 'failed';
+    }
+  });
+}
+
+function wireRooms(){
+  $('rCreate').addEventListener('click', () =>
+    roomCall('room:create', { name: $('rName').value, stake: parseFloat($('rStake').value) }));
+  $('rJoin').addEventListener('click', () =>
+    roomCall('room:join', { code: $('rCode').value.trim().toUpperCase(), name: $('rName').value }));
+  $('rFlag').addEventListener('change', () => {
+    if ($('rFlag').value) roomCall('room:pick', { flag: $('rFlag').value });
+  });
+  $('rReady').addEventListener('click', () =>
+    roomCall('room:ready', { ready: !myReady }));
+  $('rLeave').addEventListener('click', () => {
+    sock.emit('room:leave', {}, () => {
+      myRoom = null; customFlags = null;
+      $('roomInfo').hidden = true; $('roomLobby').hidden = false;
+      buildFlags(clampN()); refreshOdds();
+    });
+  });
+}
+
+/* Room round: the flags in play are the players' picks, so the winning
+   index names a player directly. */
+function playRoomRound(d){
+  customFlags = d.flagCodes;
+  buildFlags(d.flagCodes.length);
+  picks.clear();
+  round = new Round(d.seed, d.flagCodes.length);
+  round.trackEscapes = true;
+  $('hSeed').textContent = d.seed;
+  $('hState').textContent = 'running';
+  $('rNote').textContent = `Pot ${d.pot.toFixed(2)} — good luck.`;
+
+  const loop = () => {
+    for (let k = 0; k < 2; k++) if (!round.finished()) round.step();
+    $('hAlive').textContent = round.aliveCount;
+    draw();
+    if (round.finished()) anim = null;
+    else anim = requestAnimationFrame(loop);
+  };
+  anim = requestAnimationFrame(loop);
+}
+
+wireRooms();
 connect();
 
 </script>
