@@ -1,229 +1,968 @@
-/* =====================================================================
-   sim-core.js — SHARED simulation core.
-   This exact file must be identical on the client and on the server.
-   If they drift apart the animation will show a different winner than
-   the one the server pays out. SIM_VERSION guards against that.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flags Battle</title>
+<style>
+  :root{
+    --bg:#0A1024; --panel:#121A38; --panel2:#0E1530; --line:#243266;
+    --gold:#F2C14E; --kill:#E0457B; --mint:#4FD1A5; --txt:#E6EBFA; --mut:#8695C4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --cond: "Arial Narrow", "Helvetica Neue", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 system-ui,-apple-system,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px;
+        display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
 
-   Uses only + - * / and sqrt, so the same seed produces the same
-   result on every device and every CPU.
+  h1{font-family:var(--cond);font-size:22px;letter-spacing:.16em;text-transform:uppercase;
+     margin:0 0 12px;font-weight:700}
+
+  .stage{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px;position:relative}
+  canvas{width:100%;display:block;border-radius:8px}
+  .hud{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;
+       color:var(--mut);letter-spacing:.08em;padding:2px 4px 8px;text-transform:uppercase}
+  .hud b{color:var(--gold);font-weight:600}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .card h2{font-family:var(--cond);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+           color:var(--mut);margin:0 0 12px;font-weight:700}
+
+  label{display:block;font-size:11px;color:var(--mut);letter-spacing:.08em;
+        text-transform:uppercase;margin:10px 0 4px}
+  input,select,button{font:inherit;width:100%;background:var(--panel2);color:var(--txt);
+        border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  input,select{font-family:var(--mono)}
+  button{cursor:pointer;font-family:var(--cond);letter-spacing:.14em;text-transform:uppercase;
+         font-weight:700;border-color:transparent;background:var(--gold);color:#14183a;transition:.15s}
+  button:hover:not(:disabled){filter:brightness(1.1)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.ghost{background:transparent;border-color:var(--line);color:var(--txt)}
+  :focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);
+      font-family:var(--mono);font-size:13px}
+  .kv:last-child{border:0}
+  .kv span:first-child{color:var(--mut);font-family:system-ui,sans-serif;font-size:12px}
+  .big{font-family:var(--mono);font-size:28px;color:var(--gold);letter-spacing:-.02em}
+  .note{font-size:11px;color:var(--mut);line-height:1.5;margin-top:10px}
+  .ok{color:var(--mint)} .bad{color:var(--kill)}
+  progress{width:100%;height:6px;margin-top:10px}
+  .strip{display:flex;flex-wrap:wrap;align-items:center;gap:10px 26px;margin-top:14px;
+         background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px}
+  .strip span{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+              color:var(--mut);margin-bottom:3px}
+  .strip b{font-family:var(--mono);font-size:14px;font-weight:600}
+  .strip-main{padding-right:26px;border-right:1px solid var(--line)}
+  .strip-main b{font-size:24px;color:var(--gold);letter-spacing:-.02em}
+  @media(max-width:520px){ .strip-main{border-right:0;width:100%} }
+  .quick{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+  .quick button{flex:1 1 44px}
+  button.sm{padding:5px 0;font-size:11px;letter-spacing:.06em}
+  #chips{display:flex;flex-wrap:wrap;gap:4px;max-height:150px;overflow:auto;
+         background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px}
+  .chip{font-family:var(--mono);font-size:11px;padding:3px 5px;border-radius:5px;cursor:pointer;
+        background:#1A2450;color:var(--mut);border:1px solid transparent;user-select:none;line-height:1.3}
+  .chip.on{background:var(--gold);color:#14183a;font-weight:700}
+  .chip.won{background:var(--mint);color:#0A1024;font-weight:700}
+  button.mode.active{background:var(--gold);color:#14183a;border-color:transparent}
+  #picked{margin-top:8px;font-size:11px;color:var(--mut);line-height:1.6;
+          max-height:78px;overflow:auto}
+  #picked b{color:var(--txt);font-weight:600}
+  .chip .fi{width:16px;height:11px;object-fit:cover;vertical-align:-1px;margin-right:4px;
+            border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
+  #log{font-family:var(--mono);font-size:11px;color:var(--mut);max-height:120px;overflow:auto;
+       margin-top:10px;white-space:pre-wrap}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;
+       background:var(--mut);vertical-align:middle}
+  .dot.on{background:var(--mint)} .dot.off{background:var(--kill)}
+  #chatBox{height:190px;overflow:auto;background:var(--panel2);border:1px solid var(--line);
+           border-radius:8px;padding:8px;font-size:12px;line-height:1.45}
+  .msg{margin-bottom:5px;word-break:break-word}
+  .msg b{color:var(--gold);font-weight:600;font-size:11px}
+  .msg.sys{color:var(--mut);font-style:italic}
+  .chatrow{display:flex;gap:6px;margin-top:8px}
+  .chatrow input{flex:1}
+  .chatrow button{width:auto;padding:9px 14px}
+  .hash{font-family:var(--mono);font-size:10px;color:var(--mut);word-break:break-all}
+  #timer{font-family:var(--mono);font-size:13px;color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div>
+    <h1>Flags Battle</h1>
+    <div class="stage">
+      <div class="hud">
+        <div>Round <b id="hRound">—</b></div>
+        <div><b id="hAlive">—</b> / <span id="hTotal">—</span> flags</div>
+        <div>Odds <b id="hOdds">—</b>×</div>
+      </div>
+      <canvas id="cv" width="900" height="900"></canvas>
+      <div class="hud" style="padding-top:10px">
+        <div>Seed <b id="hSeed">—</b></div>
+        <div id="hState">ready</div>
+      </div>
+    </div>
+
+    <div class="strip">
+      <div class="strip-main">
+        <span>Balance</span>
+        <b id="oBal">1,000.00</b>
+      </div>
+      <div class="strip-item"><span>Rounds played</span><b id="oPlayed">0</b></div>
+      <div class="strip-item"><span>Total staked</span><b id="oStaked">0.00</b></div>
+      <div class="strip-item"><span>Total paid out</span><b id="oPaid">0.00</b></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Bet</h2>
+      <div class="kv"><span>Flags in round</span><b id="oFlags">195</b></div>
+      <label for="fBet">Stake per flag</label>
+      <input id="fBet" type="number" min="0.1" step="0.1" value="1">
+      <label>Quick pick — random flags</label>
+      <div class="quick">
+        <button class="ghost sm mode" data-mode="1">1</button>
+        <button class="ghost sm mode" data-mode="8">8</button>
+        <button class="ghost sm mode" data-mode="17">17</button>
+        <button class="ghost sm mode" data-mode="28">28</button>
+        <button class="ghost sm mode" data-mode="53">53</button>
+        <button class="ghost sm mode" data-mode="88">88</button>
+        <button class="ghost sm mode" data-mode="98">98</button>
+        <button class="ghost sm" data-fill="random">Fill randomly</button>
+        <button class="ghost sm" data-fill="clear">Clear</button>
+      </div>
+      <div id="modeNote" class="note" style="margin:0 0 8px"></div>
+      <div id="chips"></div>
+      <div id="picked"></div>
+      <div class="kv" style="margin-top:12px"><span>Payout odds</span><b id="oOdds">—</b></div>
+      <div class="kv"><span>Coverage</span><b id="oCov">—</b></div>
+      <div class="kv"><span>Total stake</span><b id="oStake">—</b></div>
+      <div class="kv"><span>Payout if hit</span><b id="oWin">—</b></div>
+      <div class="kv"><span>Net if hit</span><b id="oNet">—</b></div>
+      <div class="kv"><span>Expected loss</span><b id="oEv">—</b></div>
+      <div style="margin-top:12px"><button id="btnSpin">Run round</button></div>
+      <div style="margin-top:8px"><button id="btnSkip" class="ghost">Skip animation</button></div>
+    </div>
+
+    <div class="card" id="roomCard" hidden>
+      <h2>Private room</h2>
+      <div id="roomLobby">
+        <label for="rName">Your name</label>
+        <input id="rName" type="text" maxlength="16" placeholder="name">
+        <div class="row">
+          <div><label for="rStake">Stake each</label><input id="rStake" type="number" min="1" value="10"></div>
+          <div><label for="rCode">Room code</label><input id="rCode" type="text" maxlength="5" placeholder="ABC12"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="rCreate">Create</button>
+          <button id="rJoin" class="ghost">Join</button>
+        </div>
+      </div>
+
+      <div id="roomInfo" hidden>
+        <div class="kv"><span>Room code</span><b id="rCodeOut">—</b></div>
+        <div class="kv"><span>Stake each</span><b id="rStakeOut">—</b></div>
+        <div class="kv"><span>Pot</span><b id="rPot">—</b></div>
+        <div class="kv"><span>Winner takes</span><b id="rTakes">—</b></div>
+        <label>Players</label>
+        <div id="rPlayers"></div>
+        <label for="rFlag">Your flag</label>
+        <select id="rFlag"></select>
+        <div class="row" style="margin-top:12px">
+          <button id="rReady">Ready</button>
+          <button id="rLeave" class="ghost">Leave</button>
+        </div>
+        <div class="note" id="rNote"></div>
+      </div>
+    </div>
+
+    <div class="card" id="chatCard" hidden>
+      <h2>Live chat</h2>
+      <div id="chatBox"></div>
+      <div class="chatrow">
+        <input id="chatIn" type="text" maxlength="200" placeholder="Say something…">
+        <button id="chatSend">Send</button>
+      </div>
+      <div class="note">Messages are filtered and logged on the server.</div>
+    </div>
+
+    <div class="card" id="fairCard" hidden>
+      <h2>Provably fair</h2>
+      <div class="kv"><span>Commitment</span><b id="fHash">—</b></div>
+      <div class="kv"><span>Client seed</span><b id="fClient">—</b></div>
+      <div class="kv"><span>Nonce</span><b id="fNonce">—</b></div>
+      <div class="kv"><span>Revealed seed</span><b id="fServer">—</b></div>
+      <div class="note">Before betting opens the server publishes sha256(serverSeed).
+        After the round it reveals serverSeed, so you can check the hash matches and
+        recompute the winner yourself: seed = HMAC-SHA256(serverSeed, clientSeed:nonce).</div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="sim-core.js"></script>
+<script>
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+/* sim-core.js must sit next to this file. Opening index.html on its own
+   (a file preview, a stray copy) leaves every symbol undefined and the page
+   dies with an unhelpful "Script error". Say so plainly instead. */
+if (typeof Round === 'undefined' || typeof SIM_VERSION === 'undefined'){
+  document.body.innerHTML =
+    '<div style="max-width:520px;margin:18vh auto;padding:24px;font:15px/1.6 system-ui;' +
+    'color:#E6EBFA;background:#121A38;border:1px solid #243266;border-radius:14px">' +
+    '<h2 style="margin:0 0 10px;font-size:17px">sim-core.js is missing</h2>' +
+    'This page needs <code>sim-core.js</code> in the same folder. ' +
+    'Upload both files together, or open the deployed URL rather than the file on its own.' +
+    '</div>';
+  throw new Error('sim-core.js not loaded');
+}
+
+const cv = $('cv'), ctx = cv.getContext('2d');
+let flags = [], round = null, anim = null, bal = 1000, played = 0, staked = 0, paid = 0, roundNo = 0;
+let emojiOK = true;
+
+/* Windows has no flag emoji at all, so the only way to show real flags
+   everywhere is to load images. These come from flagcdn.com (free, no key).
+   Each is a small PNG; 195 of them is roughly 300 kB, cached after the first
+   load. If the CDN is unreachable the coloured-code chips are used instead,
+   so the game never breaks on a failed image. */
+const FLAG_CDN = 'https://flagcdn.com/w40/';
+const flagImg = Object.create(null);
+let flagsLoaded = 0;
+
+function preloadFlags(){
+  for (const code of ISO){
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = FLAG_CDN + code.toLowerCase() + '.png';
+    img.onload = () => { flagsLoaded++; if (round) draw(); };
+    img.onerror = () => { img.failed = true; };
+    flagImg[code] = img;
+  }
+}
+
+function imgFor(code){
+  const im = flagImg[code];
+  return (im && !im.failed && im.complete && im.naturalWidth) ? im : null;
+}
+
+/* Width-based detection was wrong: Windows renders a flag emoji as the two
+   regional-indicator letters, which measure about the same as the code. So
+   draw one and look at the pixels instead — a real flag emoji is colourful,
+   the letter fallback is monochrome. Only used for the bet slip now. */
+(function detectEmoji(){
+  try {
+    const t = document.createElement('canvas');
+    t.width = t.height = 24;
+    const c = t.getContext('2d', { willReadFrequently: true });
+    c.fillStyle = '#fff'; c.fillRect(0, 0, 24, 24);
+    c.fillStyle = '#000';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = '18px system-ui, sans-serif';
+    c.fillText(flagEmoji('SK'), 12, 12);
+    const px = c.getImageData(0, 0, 24, 24).data;
+    let coloured = 0;
+    for (let i = 0; i < px.length; i += 4){
+      if (px[i+3] < 40) continue;
+      const r = px[i], g = px[i+1], b = px[i+2];
+      if (Math.max(r,g,b) - Math.min(r,g,b) > 28) coloured++;
+    }
+    emojiOK = coloured > 4;
+  } catch (_){ emojiOK = false; }
+})();
+
+preloadFlags();
+
+const NAMES = {"AF":"Afghanistan","AL":"Albania","DZ":"Algeria","AD":"Andorra","AO":"Angola","AG":"Antigua and Barbuda","AR":"Argentina","AM":"Armenia","AU":"Australia","AT":"Austria","AZ":"Azerbaijan","BS":"Bahamas","BH":"Bahrain","BD":"Bangladesh","BB":"Barbados","BY":"Belarus","BE":"Belgium","BZ":"Belize","BJ":"Benin","BT":"Bhutan","BO":"Bolivia","BA":"Bosnia and Herzegovina","BW":"Botswana","BR":"Brazil","BN":"Brunei","BG":"Bulgaria","BF":"Burkina Faso","BI":"Burundi","CV":"Cabo Verde","KH":"Cambodia","CM":"Cameroon","CA":"Canada","CF":"Central African Republic","TD":"Chad","CL":"Chile","CN":"China","CO":"Colombia","KM":"Comoros","CG":"Congo","CD":"DR Congo","CR":"Costa Rica","CI":"Ivory Coast","HR":"Croatia","CU":"Cuba","CY":"Cyprus","CZ":"Czechia","DK":"Denmark","DJ":"Djibouti","DM":"Dominica","DO":"Dominican Republic","EC":"Ecuador","EG":"Egypt","SV":"El Salvador","GQ":"Equatorial Guinea","ER":"Eritrea","EE":"Estonia","SZ":"Eswatini","ET":"Ethiopia","FJ":"Fiji","FI":"Finland","FR":"France","GA":"Gabon","GM":"Gambia","GE":"Georgia","DE":"Germany","GH":"Ghana","GR":"Greece","GD":"Grenada","GT":"Guatemala","GN":"Guinea","GW":"Guinea-Bissau","GY":"Guyana","HT":"Haiti","HN":"Honduras","HU":"Hungary","IS":"Iceland","IN":"India","ID":"Indonesia","IR":"Iran","IQ":"Iraq","IE":"Ireland","IL":"Israel","IT":"Italy","JM":"Jamaica","JP":"Japan","JO":"Jordan","KZ":"Kazakhstan","KE":"Kenya","KI":"Kiribati","KP":"North Korea","KR":"South Korea","KW":"Kuwait","KG":"Kyrgyzstan","LA":"Laos","LV":"Latvia","LB":"Lebanon","LS":"Lesotho","LR":"Liberia","LY":"Libya","LI":"Liechtenstein","LT":"Lithuania","LU":"Luxembourg","MG":"Madagascar","MW":"Malawi","MY":"Malaysia","MV":"Maldives","ML":"Mali","MT":"Malta","MH":"Marshall Islands","MR":"Mauritania","MU":"Mauritius","MX":"Mexico","FM":"Micronesia","MD":"Moldova","MC":"Monaco","MN":"Mongolia","ME":"Montenegro","MA":"Morocco","MZ":"Mozambique","MM":"Myanmar","NA":"Namibia","NR":"Nauru","NP":"Nepal","NL":"Netherlands","NZ":"New Zealand","NI":"Nicaragua","NE":"Niger","NG":"Nigeria","MK":"North Macedonia","NO":"Norway","OM":"Oman","PK":"Pakistan","PW":"Palau","PS":"Palestine","PA":"Panama","PG":"Papua New Guinea","PY":"Paraguay","PE":"Peru","PH":"Philippines","PL":"Poland","PT":"Portugal","QA":"Qatar","RO":"Romania","RU":"Russia","RW":"Rwanda","KN":"Saint Kitts and Nevis","LC":"Saint Lucia","VC":"Saint Vincent and the Grenadines","WS":"Samoa","SM":"San Marino","ST":"Sao Tome and Principe","SA":"Saudi Arabia","SN":"Senegal","RS":"Serbia","SC":"Seychelles","SL":"Sierra Leone","SG":"Singapore","SK":"Slovakia","SI":"Slovenia","SB":"Solomon Islands","SO":"Somalia","ZA":"South Africa","SS":"South Sudan","ES":"Spain","LK":"Sri Lanka","SD":"Sudan","SR":"Suriname","SE":"Sweden","CH":"Switzerland","SY":"Syria","TJ":"Tajikistan","TZ":"Tanzania","TH":"Thailand","TL":"Timor-Leste","TG":"Togo","TO":"Tonga","TT":"Trinidad and Tobago","TN":"Tunisia","TR":"Turkey","TM":"Turkmenistan","TV":"Tuvalu","UG":"Uganda","UA":"Ukraine","AE":"United Arab Emirates","GB":"United Kingdom","US":"United States","UY":"Uruguay","UZ":"Uzbekistan","VU":"Vanuatu","VA":"Vatican City","VE":"Venezuela","VN":"Vietnam","YE":"Yemen","ZM":"Zambia","ZW":"Zimbabwe"};
+
+/* The only coverages that have a book published to the RGS. The player may
+   build a slip by hand in any order they like, but the number of flags on it
+   has to land on one of these before the round can be paid out. The quick-pick
+   buttons are a convenience on top of that rule, not the rule itself. */
+const MODES = [1, 8, 17, 28, 53, 88, 98];
+
+/* Fixed, not a player-facing control. The edge belongs in the game rules and
+   the operator's own disclosure, not in the betting panel. */
+const HOUSE_EDGE = 4;
+
+/* Network state lives up here on purpose. checkSlip() runs during first
+   paint and reads `online`; if the declaration sat further down it would
+   still be in the temporal dead zone and the whole init would throw —
+   which is exactly why the arena came up blank. */
+let sock = null, online = false, srvConfig = null, betLocked = false, closesAt = 0;
+let myId = null;
+
+let picks = new Set();
+
+/* ---------- slot layout ----------
+   The RGS settles on `winnerIndex < coverage`: it assumes the player's flags
+   sit in sim slots 0..k-1. The player picks freely, so the client has to
+   arrange the board to match — picked flags take the low slots, the rest fill
+   in behind them.
+
+   This does not touch the physics. A slot is only a label; the simulation
+   depends on the seed and the flag count, nothing else. And because the
+   winning slot is uniform, moving a flag to a low slot neither helps nor
+   hurts it. Without this the animation can crown a flag the player never
+   picked while the RGS pays the bet as a hit.
+
+   Locked while a round is in flight so the board cannot be relabelled
+   mid-animation. */
+let slotFlag = [];        // slotFlag[s] = country code drawn at sim slot s
+let slotChip = [];        // slotChip[s] = index of that flag in the chip list
+let slotsLocked = false;
+let lockedK = 0;          // coverage the round was actually bet at
+
+function buildSlots(){
+  if (slotsLocked) return;
+  if (customFlags){
+    // Private rooms: one flag per player, so the winning index already names
+    // a player. Any permutation here would point at the wrong person.
+    slotChip = flags.map((_, i) => i);
+  } else {
+    const sel  = [...picks].sort((a,b) => a-b);
+    const rest = flags.map((_, i) => i).filter(i => !picks.has(i));
+    slotChip = sel.concat(rest);
+  }
+  slotFlag = slotChip.map(i => flags[i]);
+}
+
+/* Which of the seven counts are reachable at the current field size. With
+   fewer than 98 flags in play, the larger books simply cannot be filled. */
+function validCounts(n){ return MODES.filter(m => m <= n); }
+
+/* Uniform sample without replacement. The old loop added random indices until
+   the set was big enough, which degenerates badly as the count approaches the
+   field size — asking for 98 of 98 would spin for a long time. */
+function randomPicks(k, n){
+  k = Math.max(0, Math.min(k, n));
+  const idx = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--){
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+  }
+  return new Set(idx.slice(0, k));
+}
+
+/* Deterministic colour per country, used until an image arrives or if the
+   CDN fails entirely. */
+function chipHue(code){
+  let h = 0;
+  for (let k = 0; k < code.length; k++) h = (h * 31 + code.charCodeAt(k)) % 360;
+  return h;
+}
+
+let customFlags = null;   // set during a private-room round
+
+function buildFlags(n){
+  if (customFlags){
+    flags = customFlags.slice();
+  } else {
+    flags = ISO.slice(0, Math.min(n, ISO.length));
+    while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
+  }
+  for (const i of [...picks]) if (i >= n) picks.delete(i);
+  $('chips').innerHTML = flags.map((c,i) =>
+    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}" ` +
+    `title="${NAMES[c] || c}">` +
+    `<img class="fi" src="${FLAG_CDN}${c.toLowerCase()}.png" alt="" loading="lazy" ` +
+    `onerror="this.style.display='none'">${c}</span>`
+  ).join('');
+  buildSlots();
+  renderPicked();
+}
+
+/* Full country names for whatever is on the slip, so the player is never
+   looking at bare two-letter codes. */
+function renderPicked(){
+  const box = $('picked');
+  if (!box) return;
+  if (!picks.size){ box.innerHTML = ''; return; }
+  const list = [...picks].sort((a,b)=>a-b)
+    .map(i => `<b>${NAMES[flags[i]] || flags[i]}</b>`).join(', ');
+  box.innerHTML = list;
+}
+
+/* Selection itself is free — click whatever you want. The Run button is what
+   enforces the rule: the slip has to hold one of the seven payable counts.
+   Anything else has no book behind it and cannot be settled. */
+function checkSlip(){
+  const n = clampN(), have = picks.size, valid = validCounts(n);
+  const ok = valid.includes(have);
+  const note = $('modeNote'), btn = $('btnSpin');
+
+  if (note){
+    if (ok){
+      note.innerHTML = `<span class="ok">Ready — ${have} flag${have>1?'s':''} selected</span>`;
+    } else if (!have){
+      note.innerHTML = `Pick any flags you like, or tap a number for a random set. ` +
+                       `Payable counts: ${valid.join(', ')}.`;
+    } else {
+      const up   = valid.find(m => m > have);
+      const down = [...valid].reverse().find(m => m < have);
+      const hint = [ up ? `add ${up - have}` : null,
+                     down ? `remove ${have - down}` : null ].filter(Boolean).join(' or ');
+      note.innerHTML = `<span class="bad">${have} selected — not a payable count.</span>` +
+                       (hint ? ` ${hint}.` : '');
+    }
+  }
+
+  document.querySelectorAll('.mode').forEach(x => {
+    const m = +x.dataset.mode;
+    x.disabled = m > n;
+    x.classList.toggle('active', ok && m === have);
+  });
+
+  if (btn && !online) btn.disabled = !ok;
+  return ok;
+}
+
+/* `w` is a sim slot, not a chip index. Map it back before highlighting. */
+function markWinner(w){
+  const ci = slotChip[w];
+  if (ci === undefined) return;
+  const el = $('chips').querySelector(`[data-i="${ci}"]`);
+  if (el && picks.has(ci)) el.classList.add('won');
+}
+
+/* Every picked flag is its own independent bet at the single-flag odds.
+   Coverage does not change the odds, it changes how much is staked. Each
+   flag carries the same edge, so the return is the same at any coverage. */
+function refreshOdds(){
+  buildSlots();
+  const n = clampN(), e = HOUSE_EDGE;
+  const per = Math.max(0, parseFloat($('fBet').value) || 0);
+  const k = picks.size, p = k/n;
+  const o = oddsFor(n, e);          // fixed: every flag is its own bet
+  const stake = per * k;
+  const payout = per * o;           // only one flag can win
+
+  $('oOdds').textContent = o.toFixed(2) + '×';
+  $('oCov').textContent = k + ' / ' + n + '  (' + (p*100).toFixed(1) + ' %)';
+  $('oStake').textContent = stake.toFixed(2);
+  $('oWin').textContent = k ? payout.toFixed(2) : '—';
+  const net = payout - stake;
+  $('oNet').innerHTML = k
+    ? `<span class="${net>=0?'ok':'bad'}">${net>=0?'+':''}${net.toFixed(2)}</span>` : '—';
+  const ev = stake - p*payout;                    // average loss per round
+  $('oEv').textContent = k ? '−' + ev.toFixed(2) : '—';
+  $('hOdds').textContent = o.toFixed(2);
+  $('hTotal').textContent = n;
+  renderPicked();
+  checkSlip();
+}
+/* Fixed at 195. It used to be an input so the field size could be tried out
+   during development, but the seven books are published against 195 flags and
+   nothing else, so letting it move was only ever a way to reach a coverage the
+   RGS cannot settle. The server may still override it via `hello`. */
+let fieldSize = 195;
+
+function clampN(){ return Math.max(4, Math.min(195, fieldSize)); }
+
+function setFieldSize(n){
+  fieldSize = Math.max(4, Math.min(195, n | 0));
+  const el = $('oFlags');
+  if (el) el.textContent = fieldSize;
+}
+function fmt(x){ return x.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function refreshBal(){
+  $('oBal').textContent = fmt(bal);
+  $('oPlayed').textContent = played;
+  $('oStaked').textContent = fmt(staked);
+  $('oPaid').textContent = fmt(paid);
+}
+
+/* ---------- rendering ---------- */
+function draw(){
+  const S = cv.width, C = S/2, P = C * 0.94;
+  ctx.clearRect(0,0,S,S);
+  ctx.fillStyle = '#0A1024'; ctx.fillRect(0,0,S,S);
+  if (!round) return;
+
+  const clamp = v => Math.max(-1, Math.min(1, v));
+  const gHalf = Math.acos(clamp(round.gapThreshold()));
+  const gA = Math.atan2(round.gy, round.gx);
+  const yHalf = Math.acos(clamp(YEL_THR));
+  const yA = Math.atan2(round.yy, round.yx);
+
+  // ring — drawn from the end of the gap round to its start
+  ctx.lineWidth = S*0.009; ctx.strokeStyle = RING_COLOR; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(C, C, P, gA + gHalf, gA - gHalf + Math.PI*2); ctx.stroke();
+
+  // rotating segment, spins the other way and temporarily plugs the gap
+  ctx.strokeStyle = ARC_COLOR; ctx.lineWidth = S*0.013;
+  ctx.shadowColor = ARC_COLOR; ctx.shadowBlur = S*0.022;
+  ctx.beginPath(); ctx.arc(C, C, P, yA - yHalf, yA + yHalf); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineCap = 'butt';
+
+  const fr = round.r * P;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  function drawChip(code, px, py, alpha){
+    const h = chipHue(code);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `hsl(${h} 62% 46%)`;
+    const w = fr * 1.9, hh = fr * 1.25;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(px - w/2, py - hh/2, w, hh, fr*0.28);
+    else ctx.rect(px - w/2, py - hh/2, w, hh);
+    ctx.fill();
+    ctx.strokeStyle = `hsl(${h} 62% 72%)`; ctx.lineWidth = Math.max(1, fr*0.09); ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `700 ${Math.max(8, fr*0.95)}px ui-monospace, Menlo, Consolas, monospace`;
+    ctx.fillText(code, px, py);
+    ctx.globalAlpha = 1;
+  }
+
+  /* Real flag image if it has arrived, otherwise the coloured code chip.
+     Aspect ratio comes from the image so flags are not stretched. */
+  function drawFlag(code, px, py, alpha){
+    const im = imgFor(code);
+    if (!im) { drawChip(code, px, py, alpha); return; }
+    const w = fr * 2.0, h = w * (im.naturalHeight / im.naturalWidth);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(im, px - w/2, py - h/2, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = Math.max(0.6, fr*0.07);
+    ctx.strokeRect(px - w/2, py - h/2, w, h);
+    ctx.globalAlpha = 1;
+  }
+
+  for (const e of round.escapes) drawFlag(slotFlag[e.i], C + e.x*P, C + e.y*P, 0.4);
+
+  for (let i = 0; i < round.n; i++){
+    if (!round.alive[i]) continue;
+    drawFlag(slotFlag[i], C + round.x[i]*P, C + round.y[i]*P, 1);
+  }
+}
+
+/* ---------- round ---------- */
+function spin(skipAnim){
+  if (anim) return;
+  const n = clampN();
+  const sel = [...picks];
+  if (!validCounts(n).includes(sel.length)){
+    $('hState').innerHTML = `<span class="bad">${sel.length} flags is not a payable count — ` +
+                            `use ${validCounts(n).join(', ')}</span>`;
+    return;
+  }
+  const per = Math.max(0, parseFloat($('fBet').value) || 0);
+  const bet = per * sel.length;
+  if (bet > bal){ $('hState').textContent = 'insufficient balance'; return; }
+  const edge = HOUSE_EDGE;
+  const odds = oddsFor(n, edge);
+  const seed = (Math.random() * 4294967295) >>> 0;
+
+  buildFlags(n);
+  lockedK = sel.length;
+  slotsLocked = true;          // freeze the board for the duration of the round
+  round = new Round(seed, n); round.trackEscapes = true;
+  roundNo++;
+  bal -= bet; staked += bet; played++;
+  $('hSeed').textContent = seed;
+  $('hRound').textContent = roundNo;
+  $('btnSpin').disabled = true;
+  $('hState').textContent = 'running';
+  refreshBal();
+
+  const settle = () => {
+    const w = round.winner();
+    // Same rule the RGS uses, so the animation and the payout cannot disagree.
+    const hit = w < lockedK;
+    const code = slotFlag[w];
+    const win = hit ? per*odds : 0;
+    bal += win; paid += win;
+    markWinner(w);
+    $('hState').innerHTML = hit
+      ? `<span class="ok">HIT ${NAMES[code] || code} · payout ${fmt(win)} · net ${win-bet>=0?'+':''}${fmt(win-bet)}</span>`
+      : `<span class="bad">winner ${NAMES[code] || code} — no hit</span>`;
+    $('btnSpin').disabled = false;
+    slotsLocked = false;
+    anim = null; refreshBal(); draw();
+  };
+
+  if (skipAnim){
+    while (!round.finished()) round.step();
+    draw(); settle(); return;
+  }
+
+  const loop = () => {
+    for (let k = 0; k < 2; k++) if (!round.finished()) round.step();
+    $('hAlive').textContent = round.aliveCount;
+    draw();
+    if (round.finished()) settle(); else anim = requestAnimationFrame(loop);
+  };
+  anim = requestAnimationFrame(loop);
+}
+
+/* ---------- init ---------- */
+$('fBet').addEventListener('input', refreshOdds);
+
+/* Free-form: add or remove any flag. Nothing here caps the slip. */
+$('chips').addEventListener('click', ev => {
+  if (slotsLocked) return;
+  const el = ev.target.closest('.chip');
+  if (!el) return;
+  const i = +el.dataset.i;
+  if (picks.has(i)) picks.delete(i); else picks.add(i);
+  el.classList.toggle('on', picks.has(i));
+  el.classList.remove('won');
+  refreshOdds();
+});
+
+/* A number is an action, not a mode: it replaces the slip with that many
+   random flags. Ignoring the buttons entirely is a perfectly valid way to
+   play — hand-pick whatever you want, as long as the count lands on a book. */
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  if (slotsLocked) return;
+  const n = clampN(), k = +b.dataset.mode;
+  if (k > n) return;
+  picks = randomPicks(k, n);
+  buildFlags(n); refreshOdds();
+}));
+
+/* Re-roll: keeps the count the player already has if it is payable, otherwise
+   picks one of the seven at random and fills that. */
+document.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
+  if (slotsLocked) return;
+  const n = clampN();
+  if (b.dataset.fill === 'clear'){
+    picks.clear();
+  } else {
+    const valid = validCounts(n);
+    if (!valid.length){ picks.clear(); }
+    else {
+      const cur = picks.size;
+      const k = valid.includes(cur) ? cur : valid[(Math.random() * valid.length) | 0];
+      picks = randomPicks(k, n);
+    }
+  }
+  buildFlags(n); refreshOdds();
+}));
+
+$('btnSpin').addEventListener('click', () => online ? sendBet() : spin(false));
+$('btnSkip').addEventListener('click', () => { if (!online) spin(true); });
+
+buildFlags(clampN()); refreshOdds(); refreshBal();
+round = new Round(12345, clampN()); round.trackEscapes = true;
+$('hAlive').textContent = round.aliveCount;
+$('hRound').textContent = '0'; $('hSeed').textContent = '12345';
+draw();
+
+/* =====================================================================
+   Online mode. The server is authoritative: it picks the seed, decides
+   the winner and holds balances. This file only sends intent and plays
+   back what comes down.
+
+   With no server configured the page stays in offline demo mode, so it
+   still works as a standalone build on GitHub Pages.
    ===================================================================== */
 
-const SIM_VERSION = '2.0.0';
+const SERVER_URL = new URLSearchParams(location.search).get('server') || '';
+// (state declared near the top so first paint can read `online` safely)
 
-/* ---------- seeded PRNG (mulberry32) ---------- */
-function mulberry32(a){
-  return function(){
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+/* The connection indicator and the betting countdown are not shown in the
+   panel any more — an operator shell owns that chrome. The socket handlers
+   still call these on every state change, so they degrade to no-ops rather
+   than throwing on a missing element. Re-add the markup and they light up
+   again with no further changes. */
+function setNet(state, label){
+  const d = $('netDot'), l = $('netLabel');
+  if (d) d.className = 'dot' + (state === 'on' ? ' on' : state === 'off' ? ' off' : '');
+  if (l) l.textContent = label;
+}
+
+function setTimer(text){
+  const t = $('timer');
+  if (t) t.textContent = text;
+}
+
+function sysMsg(text){
+  const box = $('chatBox'); if (!box) return;
+  const el = document.createElement('div');
+  el.className = 'msg sys'; el.textContent = text;
+  box.appendChild(el); box.scrollTop = box.scrollHeight;
+}
+
+function chatMsg(name, text){
+  const box = $('chatBox');
+  const el = document.createElement('div');
+  el.className = 'msg';
+  const b = document.createElement('b'); b.textContent = name + ' ';
+  const t = document.createElement('span'); t.textContent = text;  // never innerHTML
+  el.append(b, t);
+  box.appendChild(el);
+  while (box.children.length > 150) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+function connect(){
+  if (!SERVER_URL){ setNet('', 'Offline — local demo'); return; }
+  setNet('', 'Connecting…');
+
+  sock = io(SERVER_URL, { query: { simVersion: SIM_VERSION }, transports: ['websocket'] });
+
+  sock.on('connect', () => { online = true; setNet('on', 'Live'); });
+
+  sock.on('fatal', d => {
+    online = false;
+    setNet('off', 'Version mismatch');
+    sysMsg(`This build runs sim ${d.client}, the server runs ${d.server}. Reload to get the current client.`);
+  });
+
+  sock.on('disconnect', () => { online = false; setNet('off', 'Disconnected'); setTimer('—'); });
+
+  sock.on('hello', d => {
+    srvConfig = d.config;
+    myId = d.you.id;
+    bal = d.you.balance;
+    $('rName').value = d.you.name;
+    $('roomCard').hidden = false;
+    setFieldSize(d.config.flags);
+    $('chatCard').hidden = !d.config.chatEnabled;
+    $('fairCard').hidden = false;
+    buildFlags(clampN()); refreshOdds(); refreshBal();
+    if (d.round) onOpen(d.round);
+  });
+
+  sock.on('round:open', onOpen);
+
+  sock.on('round:start', d => {
+    betLocked = true;
+    $('btnSpin').disabled = true;
+    setTimer('running');
+    playRound(d.seed);
+  });
+
+  sock.on('round:payout', d => {
+    bal = d.balance;
+    refreshBal();
+  });
+
+  sock.on('round:result', d => {
+    $('fServer').textContent = d.serverSeed.slice(0, 20) + '…';
+    // Cross-check: our local sim must agree with what the server paid.
+    const local = runHeadless(d.seed, srvConfig.flags);
+    if (local !== d.winner){
+      setNet('off', 'Sim mismatch');
+      sysMsg('Local simulation disagreed with the server result. Payouts follow the server.');
+    }
+  });
+
+  sock.on('chat', m => chatMsg(m.name, m.text));
+
+  sock.on('room:state',  r => { if (myRoom || r) renderRoom(r); });
+  sock.on('room:start',  d => playRoomRound(d));
+  sock.on('balance',     d => { bal = d.balance; refreshBal(); });
+  sock.on('room:result', d => {
+    const won = d.winnerId === myId;
+    $('hState').innerHTML = won
+      ? `<span class="ok">YOU WIN ${d.payout.toFixed(2)} — ${d.winnerFlag}</span>`
+      : `<span class="bad">${escapeHtml(d.winnerName)} wins with ${d.winnerFlag}</span>`;
+    $('rNote').textContent =
+      `Pot ${d.pot.toFixed(2)} · rake ${d.rake.toFixed(2)} · payout ${d.payout.toFixed(2)}`;
+    $('fServer').textContent = d.serverSeed.slice(0, 20) + '…';
+    customFlags = null;
+  });
+}
+
+function onOpen(r){
+  betLocked = false;
+  slotsLocked = false; lockedK = 0;
+  picks.clear();
+  buildFlags(r.flags);
+  refreshOdds();
+  closesAt = r.closesAt;
+  $('btnSpin').disabled = false;
+  $('hRound').textContent = r.nonce;
+  $('fHash').textContent = r.serverSeedHash.slice(0, 20) + '…';
+  $('fClient').textContent = r.clientSeed;
+  $('fNonce').textContent = r.nonce;
+  $('fServer').textContent = 'revealed after the round';
+  $('hState').textContent = 'betting open';
+}
+
+setInterval(() => {
+  if (!online || betLocked) return;
+  const left = Math.max(0, closesAt - Date.now());
+  setTimer(left ? (left / 1000).toFixed(1) + ' s' : 'closed');
+}, 100);
+
+/* Plays the animation from the server's seed. The winner comes out of the
+   shared sim, so a drifting client is caught by the cross-check above. */
+function playRound(seed){
+  const n = srvConfig.flags;
+  round = new Round(seed, n); round.trackEscapes = true;
+  $('hSeed').textContent = seed;
+  const loop = () => {
+    for (let k = 0; k < 2; k++) if (!round.finished()) round.step();
+    $('hAlive').textContent = round.aliveCount;
+    draw();
+    if (round.finished()){
+      const w = round.winner();
+      markWinner(w);
+      const code = slotFlag[w];
+      $('hState').innerHTML = w < lockedK
+        ? `<span class="ok">HIT ${NAMES[code] || code}</span>`
+        : `<span class="bad">winner ${NAMES[code] || code}</span>`;
+      slotsLocked = false;
+      anim = null;
+    } else anim = requestAnimationFrame(loop);
   };
+  anim = requestAnimationFrame(loop);
 }
 
-/* ---------- country list (ISO alpha-2) ---------- */
-const ISO = ("AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PW PS PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VA VE VN YE ZM ZW").split(" ");
-const flagEmoji = c => String.fromCodePoint(...[...c].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65));
-
-/* ---------- simulation core ----------
-   Runs on a fixed timestep and uses only +,-,*,/ and sqrt,
-   so the same seed yields the same result on every device.
-   Segment rotation is matrix multiplication with fixed constants — no Math.sin/cos.
------------------------------------------------- */
-const DT = 1/60, SPEED = 1.25;
-// The ring gap rotates one way, the arc segment the other. Fixed constants => no Math.sin/cos.
-const GAP_C = 0.99875026039, GAP_S = 0.04997916927;   // +0.050 rad / step
-const YEL_C = 0.99920010666, YEL_S = 0.03998933419;   // -0.040 rad / step
-const GAP_T0 = 0.98, GAP_T1 = 0.94, GAP_GROW = 18;    // gap stays narrow: 23deg -> 40deg
-const YEL_THR = 0.93;                                 // segment 43deg — wider than the gap, so it fully plugs it
-const RUSH = 5.5;                                     // speed-up as flags are eliminated
-const ARC_COLOR = '#FF8A2B';                          // colour of the rotating segment
-const RING_COLOR = '#E6EBFA';                         // colour of the ring with the gap
-
-/* Endgame ramp. From RAMP_T0 the ring opens out until nothing of it is left,
-   so a stalled round cannot drag on: with no wall, the next contact with the
-   edge eliminates. Rounds that end normally never get here — by t=40 there is
-   on average 1.3 flags still in play — so this only touches the tail.
-
-   Without it about one round in 400 reached the 90s limit with two flags still
-   alive, and winner() handed the win to whichever sat on the lower slot. That
-   is exactly where the client puts the player's picks, so it leaked edge. */
-const RAMP_T0 = 40, RAMP_T1 = 52, RAMP_END = -1;
-
-class Round {
-  constructor(seed, n){
-    const rnd = mulberry32(seed >>> 0);
-    this.n = n; this.rnd = rnd; this.t = 0;
-    this.r = 0.55 / Math.sqrt(n);          // flag radius
-    this.R = 1;                            // arena radius
-    this.x = new Float64Array(n); this.y = new Float64Array(n);
-    this.vx = new Float64Array(n); this.vy = new Float64Array(n);
-    this.alive = new Uint8Array(n).fill(1);
-    this.aliveCount = n;
-    this.dead = [];
-    this.trackEscapes = false; this.escapes = [];
-    this._winner = -1;
-
-    const lim = this.R - this.r * 1.05;
-    for (let i = 0; i < n; i++){
-      let px = 0, py = 0;
-      for (let a = 0; a < 400; a++){
-        px = (rnd()*2 - 1) * lim; py = (rnd()*2 - 1) * lim;
-        if (px*px + py*py > lim*lim) continue;
-        let clash = false;
-        for (let j = 0; j < i; j++){
-          const dx = px - this.x[j], dy = py - this.y[j];
-          if (dx*dx + dy*dy < (2.02*this.r)*(2.02*this.r)) { clash = true; break; }
-        }
-        if (!clash) break;
-      }
-      this.x[i] = px; this.y[i] = py;
-      let dx = 0, dy = 0, d2 = 0;                       // direction without trigonometry
-      do { dx = rnd()*2 - 1; dy = rnd()*2 - 1; d2 = dx*dx + dy*dy; } while (d2 < 0.01 || d2 > 1);
-      const inv = SPEED / Math.sqrt(d2);
-      this.vx[i] = dx*inv; this.vy[i] = dy*inv;
+function sendBet(){
+  const perFlag = Math.max(0, parseFloat($('fBet').value) || 0);
+  const n = srvConfig ? srvConfig.flags : clampN();
+  if (!validCounts(n).includes(picks.size)){
+    $('hState').innerHTML = `<span class="bad">${picks.size} flags is not a payable count — ` +
+                            `use ${validCounts(n).join(', ')}</span>`;
+    return;
+  }
+  $('btnSpin').disabled = true;
+  sock.emit('bet', { perFlag, betMode: picks.size, picks: [...picks] }, res => {
+    if (res && res.ok){
+      bal = res.balance; refreshBal();
+      lockedK = picks.size;
+      slotsLocked = true;      // the board is now what the server will settle against
+      $('hState').innerHTML = `<span class="ok">bet placed — ${res.picks.length} flags</span>`;
+    } else {
+      $('btnSpin').disabled = false;
+      $('hState').innerHTML = `<span class="bad">${(res && res.msg) || 'bet rejected'}</span>`;
     }
-
-    this.gx = 1; this.gy = 0;                            // centre of the ring gap
-    this.yx = 1; this.yy = 0;                            // centre of the rotating segment
-    let s1 = (rnd() * 780) | 0, s2 = (rnd() * 780) | 0;
-    for (let s = 0; s < s1; s++) this.rotGap();
-    for (let s = 0; s < s2; s++) this.rotYel();
-
-    // collision grid
-    this.cell = this.r * 2.2;
-    this.gw = Math.max(1, Math.ceil(2 / this.cell));
-    this.buckets = Array.from({length: this.gw*this.gw}, () => []);
-  }
-
-  rotGap(){
-    const nx = this.gx*GAP_C - this.gy*GAP_S;
-    const ny = this.gx*GAP_S + this.gy*GAP_C;
-    const inv = 1 / Math.sqrt(nx*nx + ny*ny);
-    this.gx = nx*inv; this.gy = ny*inv;
-  }
-  rotYel(){                                   // opposite direction
-    const nx = this.yx*YEL_C + this.yy*YEL_S;
-    const ny = -this.yx*YEL_S + this.yy*YEL_C;
-    const inv = 1 / Math.sqrt(nx*nx + ny*ny);
-    this.yx = nx*inv; this.yy = ny*inv;
-  }
-
-  // gap threshold: higher = narrower gap. Widens over time, then the endgame
-  // ramp opens the ring completely.
-  gapThreshold(){
-    const p = this.t / GAP_GROW;
-    const g = GAP_T0 + (GAP_T1 - GAP_T0) * (p > 1 ? 1 : p);
-    if (this.t <= RAMP_T0) return g;
-    const q = (this.t - RAMP_T0) / (RAMP_T1 - RAMP_T0);
-    return g + (RAMP_END - g) * (q > 1 ? 1 : q);
-  }
-
-  step(){
-    const n = this.n, r = this.r, R = this.R;
-    this.t += DT; this.rotGap(); this.rotYel();
-    const gthr = this.gapThreshold();
-    const dt = DT * (1 + RUSH * (1 - this.aliveCount / n));   // fewer flags = faster
-
-    for (let i = 0; i < n; i++){
-      if (!this.alive[i]) continue;
-      this.x[i] += this.vx[i]*dt; this.y[i] += this.vy[i]*dt;
-      const d2 = this.x[i]*this.x[i] + this.y[i]*this.y[i];
-      const lim = R - r;
-      if (d2 > lim*lim){
-        const d = Math.sqrt(d2), nx = this.x[i]/d, ny = this.y[i]/d;
-        const inGap = (nx*this.gx + ny*this.gy) >= gthr;      // hit the gap
-        const blocked = (nx*this.yx + ny*this.yy) >= YEL_THR; // but the segment covers it
-        if (inGap && !blocked && this.aliveCount > 1){
-          this.alive[i] = 0; this.aliveCount--; this.dead.push(i);
-          if (this.trackEscapes)
-            this.escapes.push({i, x:this.x[i], y:this.y[i], vx:nx*0.9, vy:ny*0.9});
-          continue;
-        }
-        this.x[i] = nx*lim; this.y[i] = ny*lim;
-        const dot = this.vx[i]*nx + this.vy[i]*ny;
-        this.vx[i] -= 2*dot*nx; this.vy[i] -= 2*dot*ny;
-      }
-    }
-
-    // grid-based collisions
-    if (this.trackEscapes){
-      for (let k = this.escapes.length - 1; k >= 0; k--){
-        const e = this.escapes[k];
-        e.x += e.vx*dt*2.2; e.y += e.vy*dt*2.2;
-        if (e.x*e.x + e.y*e.y > 2.4) this.escapes.splice(k, 1);
-      }
-    }
-    const b = this.buckets, gw = this.gw, cs = this.cell;
-    for (let k = 0; k < b.length; k++) b[k].length = 0;
-    for (let i = 0; i < n; i++){
-      if (!this.alive[i]) continue;
-      let cx = ((this.x[i]+1)/cs)|0, cy = ((this.y[i]+1)/cs)|0;
-      if (cx < 0) cx = 0; if (cx >= gw) cx = gw-1;
-      if (cy < 0) cy = 0; if (cy >= gw) cy = gw-1;
-      b[cy*gw+cx].push(i);
-    }
-    for (let cy = 0; cy < gw; cy++) for (let cx = 0; cx < gw; cx++){
-      const A = b[cy*gw+cx];
-      if (!A.length) continue;
-      for (let oy = 0; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++){
-        if (oy === 0 && ox < 0) continue;
-        const nx2 = cx+ox, ny2 = cy+oy;
-        if (nx2 < 0 || nx2 >= gw || ny2 >= gw) continue;
-        const B = b[ny2*gw+nx2];
-        for (let ii = 0; ii < A.length; ii++){
-          const i = A[ii];
-          for (let jj = (B === A ? ii+1 : 0); jj < B.length; jj++){
-            this.collide(i, B[jj]);
-          }
-        }
-      }
-    }
-  }
-
-  collide(i, j){
-    const dx = this.x[j]-this.x[i], dy = this.y[j]-this.y[i];
-    const d2 = dx*dx + dy*dy, md = 2*this.r;
-    if (d2 >= md*md || d2 === 0) return;
-    const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, ov = (md-d)*0.5;
-    this.x[i] -= nx*ov; this.y[i] -= ny*ov;
-    this.x[j] += nx*ov; this.y[j] += ny*ov;
-    const rvx = this.vx[j]-this.vx[i], rvy = this.vy[j]-this.vy[i];
-    const p = rvx*nx + rvy*ny;
-    if (p > 0) return;
-    this.vx[i] += p*nx; this.vy[i] += p*ny;
-    this.vx[j] -= p*nx; this.vy[j] -= p*ny;
-  }
-
-  finished(){ return this.aliveCount <= 1 || this.t > 90; }
-
-  /* Memoised: the draw below consumes the round's PRNG, so calling this twice
-     must not produce two different answers. */
-  winner(){
-    if (this._winner >= 0) return this._winner;
-    const alive = [];
-    for (let i = 0; i < this.n; i++) if (this.alive[i]) alive.push(i);
-    if (alive.length === 0) return (this._winner = 0);
-    if (alive.length === 1) return (this._winner = alive[0]);
-    // Time limit reached with more than one still in play. Draw one instead of
-    // taking the first: the lowest index is never a neutral choice, because the
-    // client puts the player's picks there.
-    let k = (this.rnd() * alive.length) | 0;
-    if (k >= alive.length) k = alive.length - 1;
-    return (this._winner = alive[k]);
-  }
+  });
 }
 
-function runHeadless(seed, n){
-  const R = new Round(seed, n);
-  while (!R.finished()) R.step();
-  return R.winner();
+function sendChat(){
+  const el = $('chatIn'); const text = el.value.trim();
+  if (!text || !online) return;
+  sock.emit('chat', { text }, res => {
+    if (!res || !res.ok) sysMsg((res && res.msg) || 'not sent');
+  });
+  el.value = '';
 }
 
+$('chatSend').addEventListener('click', sendChat);
+$('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
 
-/* ---------- odds ---------- */
-// Rounded DOWN on purpose: covering every flag must always be a loss.
-function oddsFor(n, edgePct){ return Math.floor(n * (1 - edgePct/100) * 100) / 100; }
+/* ---------- private rooms ----------
+   Peer to peer: everyone stakes the same, one flag each, winner takes the
+   pot minus rake. The round itself is the same simulation, just with the
+   players' chosen flags instead of the full 195. */
+let myRoom = null, myReady = false;
 
-if (typeof module !== 'undefined' && module.exports){
-  module.exports = { SIM_VERSION, Round, runHeadless, oddsFor, mulberry32, ISO, flagEmoji };
+function fillFlagPicker(taken){
+  const sel = $('rFlag');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— pick a flag —</option>' +
+    ISO.map(c => {
+      const used = taken.includes(c) && c !== cur;
+      return `<option value="${c}"${used ? ' disabled' : ''}>${c}${used ? ' (taken)' : ''}</option>`;
+    }).join('');
+  if (cur) sel.value = cur;
 }
+
+function renderRoom(room){
+  myRoom = room;
+  $('roomLobby').hidden = true;
+  $('roomInfo').hidden = false;
+  $('rCodeOut').textContent  = room.code;
+  $('rStakeOut').textContent = room.stake.toFixed(2);
+  $('rPot').textContent      = room.pot.toFixed(2);
+  $('rTakes').textContent    = (room.pot * (1 - room.rakePct/100)).toFixed(2)
+                             + `  (rake ${room.rakePct}%)`;
+
+  const me = room.players.find(p => p.id === myId);
+  myReady = !!(me && me.ready);
+  $('rReady').textContent = myReady ? 'Not ready' : 'Ready';
+  if (me && me.flag) $('rFlag').value = me.flag;
+
+  $('rPlayers').innerHTML = room.players.map(p =>
+    `<div class="kv"><span>${p.ready ? '✓' : '·'} ${escapeHtml(p.name)}` +
+    `${p.id === room.host ? ' (host)' : ''}</span><b>${p.flag || '—'}</b></div>`
+  ).join('');
+
+  fillFlagPicker(room.players.filter(p => p.flag).map(p => p.flag));
+
+  const waiting = room.players.length < room.minPlayers;
+  $('rNote').textContent = waiting
+    ? `Waiting for players — ${room.minPlayers} needed to start.`
+    : 'Round starts as soon as everyone is ready.';
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function roomCall(ev, data){
+  if (!online) { $('rNote').textContent = 'Connect to a server first.'; return; }
+  sock.emit(ev, data, res => {
+    if (res && res.ok){
+      if (res.room) renderRoom(res.room);
+    } else {
+      $('rNote').textContent = (res && res.msg) || 'failed';
+    }
+  });
+}
+
+function wireRooms(){
+  $('rCreate').addEventListener('click', () =>
+    roomCall('room:create', { name: $('rName').value, stake: parseFloat($('rStake').value) }));
+  $('rJoin').addEventListener('click', () =>
+    roomCall('room:join', { code: $('rCode').value.trim().toUpperCase(), name: $('rName').value }));
+  $('rFlag').addEventListener('change', () => {
+    if ($('rFlag').value) roomCall('room:pick', { flag: $('rFlag').value });
+  });
+  $('rReady').addEventListener('click', () =>
+    roomCall('room:ready', { ready: !myReady }));
+  $('rLeave').addEventListener('click', () => {
+    sock.emit('room:leave', {}, () => {
+      myRoom = null; customFlags = null;
+      $('roomInfo').hidden = true; $('roomLobby').hidden = false;
+      buildFlags(clampN()); refreshOdds();
+    });
+  });
+}
+
+/* Room round: the flags in play are the players' picks, so the winning
+   index names a player directly. */
+function playRoomRound(d){
+  customFlags = d.flagCodes;
+  slotsLocked = false; lockedK = 0;
+  picks.clear();
+  buildFlags(d.flagCodes.length);
+  slotsLocked = true;
+  round = new Round(d.seed, d.flagCodes.length);
+  round.trackEscapes = true;
+  $('hSeed').textContent = d.seed;
+  $('hState').textContent = 'running';
+  $('rNote').textContent = `Pot ${d.pot.toFixed(2)} — good luck.`;
+
+  const loop = () => {
+    for (let k = 0; k < 2; k++) if (!round.finished()) round.step();
+    $('hAlive').textContent = round.aliveCount;
+    draw();
+    if (round.finished()) anim = null;
+    else anim = requestAnimationFrame(loop);
+  };
+  anim = requestAnimationFrame(loop);
+}
+
+wireRooms();
+connect();
+
+</script>
+</body>
+</html>
