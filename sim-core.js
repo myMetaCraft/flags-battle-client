@@ -1,4 +1,16 @@
-const SIM_VERSION = '1.1.0';
+/* =====================================================================
+   sim-core.js — SHARED simulation core.
+   This exact file must be identical on the client and on the server.
+   If they drift apart the animation will show a different winner than
+   the one the server pays out. SIM_VERSION guards against that.
+
+   Uses only + - * / and sqrt, so the same seed produces the same
+   result on every device and every CPU.
+   ===================================================================== */
+
+const SIM_VERSION = '2.0.0';
+
+/* ---------- seeded PRNG (mulberry32) ---------- */
 function mulberry32(a){
   return function(){
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -7,28 +19,50 @@ function mulberry32(a){
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/* ---------- country list (ISO alpha-2) ---------- */
 const ISO = ("AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PW PS PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VA VE VN YE ZM ZW").split(" ");
 const flagEmoji = c => String.fromCodePoint(...[...c].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65));
+
+/* ---------- simulation core ----------
+   Runs on a fixed timestep and uses only +,-,*,/ and sqrt,
+   so the same seed yields the same result on every device.
+   Segment rotation is matrix multiplication with fixed constants — no Math.sin/cos.
+------------------------------------------------ */
 const DT = 1/60, SPEED = 1.25;
-const GAP_C = 0.99875026039, GAP_S = 0.04997916927;
-const YEL_C = 0.99920010666, YEL_S = 0.03998933419;
-const GAP_T0 = 0.98, GAP_T1 = 0.94, GAP_GROW = 18;
-const YEL_THR = 0.93;
-const RUSH = 5.5;
-const ARC_COLOR = '#FF8A2B';
-const RING_COLOR = '#E6EBFA';
+// The ring gap rotates one way, the arc segment the other. Fixed constants => no Math.sin/cos.
+const GAP_C = 0.99875026039, GAP_S = 0.04997916927;   // +0.050 rad / step
+const YEL_C = 0.99920010666, YEL_S = 0.03998933419;   // -0.040 rad / step
+const GAP_T0 = 0.98, GAP_T1 = 0.94, GAP_GROW = 18;    // gap stays narrow: 23deg -> 40deg
+const YEL_THR = 0.93;                                 // segment 43deg — wider than the gap, so it fully plugs it
+const RUSH = 5.5;                                     // speed-up as flags are eliminated
+const ARC_COLOR = '#FF8A2B';                          // colour of the rotating segment
+const RING_COLOR = '#E6EBFA';                         // colour of the ring with the gap
+
+/* Endgame ramp. From RAMP_T0 the ring opens out until nothing of it is left,
+   so a stalled round cannot drag on: with no wall, the next contact with the
+   edge eliminates. Rounds that end normally never get here — by t=40 there is
+   on average 1.3 flags still in play — so this only touches the tail.
+
+   Without it about one round in 400 reached the 90s limit with two flags still
+   alive, and winner() handed the win to whichever sat on the lower slot. That
+   is exactly where the client puts the player's picks, so it leaked edge. */
+const RAMP_T0 = 40, RAMP_T1 = 52, RAMP_END = -1;
+
 class Round {
   constructor(seed, n){
     const rnd = mulberry32(seed >>> 0);
     this.n = n; this.rnd = rnd; this.t = 0;
-    this.r = 0.55 / Math.sqrt(n);
-    this.R = 1;
+    this.r = 0.55 / Math.sqrt(n);          // flag radius
+    this.R = 1;                            // arena radius
     this.x = new Float64Array(n); this.y = new Float64Array(n);
     this.vx = new Float64Array(n); this.vy = new Float64Array(n);
     this.alive = new Uint8Array(n).fill(1);
     this.aliveCount = n;
     this.dead = [];
     this.trackEscapes = false; this.escapes = [];
+    this._winner = -1;
+
     const lim = this.R - this.r * 1.05;
     for (let i = 0; i < n; i++){
       let px = 0, py = 0;
@@ -43,41 +77,53 @@ class Round {
         if (!clash) break;
       }
       this.x[i] = px; this.y[i] = py;
-      let dx = 0, dy = 0, d2 = 0;
+      let dx = 0, dy = 0, d2 = 0;                       // direction without trigonometry
       do { dx = rnd()*2 - 1; dy = rnd()*2 - 1; d2 = dx*dx + dy*dy; } while (d2 < 0.01 || d2 > 1);
       const inv = SPEED / Math.sqrt(d2);
       this.vx[i] = dx*inv; this.vy[i] = dy*inv;
     }
-    this.gx = 1; this.gy = 0;
-    this.yx = 1; this.yy = 0;
+
+    this.gx = 1; this.gy = 0;                            // centre of the ring gap
+    this.yx = 1; this.yy = 0;                            // centre of the rotating segment
     let s1 = (rnd() * 780) | 0, s2 = (rnd() * 780) | 0;
     for (let s = 0; s < s1; s++) this.rotGap();
     for (let s = 0; s < s2; s++) this.rotYel();
+
+    // collision grid
     this.cell = this.r * 2.2;
     this.gw = Math.max(1, Math.ceil(2 / this.cell));
     this.buckets = Array.from({length: this.gw*this.gw}, () => []);
   }
+
   rotGap(){
     const nx = this.gx*GAP_C - this.gy*GAP_S;
     const ny = this.gx*GAP_S + this.gy*GAP_C;
     const inv = 1 / Math.sqrt(nx*nx + ny*ny);
     this.gx = nx*inv; this.gy = ny*inv;
   }
-  rotYel(){
+  rotYel(){                                   // opposite direction
     const nx = this.yx*YEL_C + this.yy*YEL_S;
     const ny = -this.yx*YEL_S + this.yy*YEL_C;
     const inv = 1 / Math.sqrt(nx*nx + ny*ny);
     this.yx = nx*inv; this.yy = ny*inv;
   }
+
+  // gap threshold: higher = narrower gap. Widens over time, then the endgame
+  // ramp opens the ring completely.
   gapThreshold(){
     const p = this.t / GAP_GROW;
-    return GAP_T0 + (GAP_T1 - GAP_T0) * (p > 1 ? 1 : p);
+    const g = GAP_T0 + (GAP_T1 - GAP_T0) * (p > 1 ? 1 : p);
+    if (this.t <= RAMP_T0) return g;
+    const q = (this.t - RAMP_T0) / (RAMP_T1 - RAMP_T0);
+    return g + (RAMP_END - g) * (q > 1 ? 1 : q);
   }
+
   step(){
     const n = this.n, r = this.r, R = this.R;
     this.t += DT; this.rotGap(); this.rotYel();
     const gthr = this.gapThreshold();
-    const dt = DT * (1 + RUSH * (1 - this.aliveCount / n));
+    const dt = DT * (1 + RUSH * (1 - this.aliveCount / n));   // fewer flags = faster
+
     for (let i = 0; i < n; i++){
       if (!this.alive[i]) continue;
       this.x[i] += this.vx[i]*dt; this.y[i] += this.vy[i]*dt;
@@ -85,8 +131,8 @@ class Round {
       const lim = R - r;
       if (d2 > lim*lim){
         const d = Math.sqrt(d2), nx = this.x[i]/d, ny = this.y[i]/d;
-        const inGap = (nx*this.gx + ny*this.gy) >= gthr;
-        const blocked = (nx*this.yx + ny*this.yy) >= YEL_THR;
+        const inGap = (nx*this.gx + ny*this.gy) >= gthr;      // hit the gap
+        const blocked = (nx*this.yx + ny*this.yy) >= YEL_THR; // but the segment covers it
         if (inGap && !blocked && this.aliveCount > 1){
           this.alive[i] = 0; this.aliveCount--; this.dead.push(i);
           if (this.trackEscapes)
@@ -98,6 +144,8 @@ class Round {
         this.vx[i] -= 2*dot*nx; this.vy[i] -= 2*dot*ny;
       }
     }
+
+    // grid-based collisions
     if (this.trackEscapes){
       for (let k = this.escapes.length - 1; k >= 0; k--){
         const e = this.escapes[k];
@@ -131,6 +179,7 @@ class Round {
       }
     }
   }
+
   collide(i, j){
     const dx = this.x[j]-this.x[i], dy = this.y[j]-this.y[i];
     const d2 = dx*dx + dy*dy, md = 2*this.r;
@@ -144,15 +193,37 @@ class Round {
     this.vx[i] += p*nx; this.vy[i] += p*ny;
     this.vx[j] -= p*nx; this.vy[j] -= p*ny;
   }
+
   finished(){ return this.aliveCount <= 1 || this.t > 90; }
-  winner(){ for (let i = 0; i < this.n; i++) if (this.alive[i]) return i; return 0; }
+
+  /* Memoised: the draw below consumes the round's PRNG, so calling this twice
+     must not produce two different answers. */
+  winner(){
+    if (this._winner >= 0) return this._winner;
+    const alive = [];
+    for (let i = 0; i < this.n; i++) if (this.alive[i]) alive.push(i);
+    if (alive.length === 0) return (this._winner = 0);
+    if (alive.length === 1) return (this._winner = alive[0]);
+    // Time limit reached with more than one still in play. Draw one instead of
+    // taking the first: the lowest index is never a neutral choice, because the
+    // client puts the player's picks there.
+    let k = (this.rnd() * alive.length) | 0;
+    if (k >= alive.length) k = alive.length - 1;
+    return (this._winner = alive[k]);
+  }
 }
+
 function runHeadless(seed, n){
   const R = new Round(seed, n);
   while (!R.finished()) R.step();
   return R.winner();
 }
+
+
+/* ---------- odds ---------- */
+// Rounded DOWN on purpose: covering every flag must always be a loss.
 function oddsFor(n, edgePct){ return Math.floor(n * (1 - edgePct/100) * 100) / 100; }
+
 if (typeof module !== 'undefined' && module.exports){
   module.exports = { SIM_VERSION, Round, runHeadless, oddsFor, mulberry32, ISO, flagEmoji };
 }
