@@ -124,18 +124,9 @@
   <div>
     <div class="card">
       <h2>Bet</h2>
-      <label for="fCount">Flags in round</label>
-      <input id="fCount" type="number" min="4" max="195" value="195">
-      <div class="row">
-        <div>
-          <label for="fBet">Stake per flag</label>
-          <input id="fBet" type="number" min="0.1" step="0.1" value="1">
-        </div>
-        <div>
-          <label for="fSeed">Seed (offline only)</label>
-          <input id="fSeed" type="text" placeholder="auto">
-        </div>
-      </div>
+      <div class="kv"><span>Flags in round</span><b id="oFlags">195</b></div>
+      <label for="fBet">Stake per flag</label>
+      <input id="fBet" type="number" min="0.1" step="0.1" value="1">
       <label>Quick pick — random flags</label>
       <div class="quick">
         <button class="ghost sm mode" data-mode="1">1</button>
@@ -470,10 +461,18 @@ function refreshOdds(){
   renderPicked();
   checkSlip();
 }
-function clampN(){
-  let n = parseInt($('fCount').value) || 4;
-  n = Math.max(4, Math.min(195, n));
-  return n;
+/* Fixed at 195. It used to be an input so the field size could be tried out
+   during development, but the seven books are published against 195 flags and
+   nothing else, so letting it move was only ever a way to reach a coverage the
+   RGS cannot settle. The server may still override it via `hello`. */
+let fieldSize = 195;
+
+function clampN(){ return Math.max(4, Math.min(195, fieldSize)); }
+
+function setFieldSize(n){
+  fieldSize = Math.max(4, Math.min(195, n | 0));
+  const el = $('oFlags');
+  if (el) el.textContent = fieldSize;
 }
 function fmt(x){ return x.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
 function refreshBal(){
@@ -562,8 +561,7 @@ function spin(skipAnim){
   if (bet > bal){ $('hState').textContent = 'insufficient balance'; return; }
   const edge = HOUSE_EDGE;
   const odds = oddsFor(n, edge);
-  const seedIn = $('fSeed').value.trim();
-  const seed = seedIn ? (parseInt(seedIn, 10) >>> 0) : (Math.random()*4294967295) >>> 0;
+  const seed = (Math.random() * 4294967295) >>> 0;
 
   buildFlags(n);
   lockedK = sel.length;
@@ -608,10 +606,7 @@ function spin(skipAnim){
 }
 
 /* ---------- init ---------- */
-['fCount','fBet'].forEach(id => $(id).addEventListener('input', () => {
-  if (id === 'fCount') buildFlags(clampN());
-  refreshOdds();
-}));
+$('fBet').addEventListener('input', refreshOdds);
 
 /* Free-form: add or remove any flag. Nothing here caps the slip. */
 $('chips').addEventListener('click', ev => {
@@ -733,11 +728,10 @@ function connect(){
     bal = d.you.balance;
     $('rName').value = d.you.name;
     $('roomCard').hidden = false;
-    $('fCount').value = d.config.flags;
-    $('fCount').disabled = $('fSeed').disabled = true;
+    setFieldSize(d.config.flags);
     $('chatCard').hidden = !d.config.chatEnabled;
     $('fairCard').hidden = false;
-    buildFlags(d.config.flags); refreshOdds(); refreshBal();
+    buildFlags(clampN()); refreshOdds(); refreshBal();
     if (d.round) onOpen(d.round);
   });
 
