@@ -123,9 +123,7 @@
 
   <div>
     <div class="card">
-      <h2><span class="dot" id="netDot"></span><span id="netLabel">Offline — local demo</span></h2>
-      <div class="kv" style="margin-bottom:10px"><span>Betting closes in</span><b id="timer">—</b></div>
-      <h2 style="margin-top:14px">Bet</h2>
+      <h2>Bet</h2>
       <label for="fCount">Flags in round</label>
       <input id="fCount" type="number" min="4" max="195" value="195">
       <div class="row">
@@ -678,10 +676,20 @@ draw();
 const SERVER_URL = new URLSearchParams(location.search).get('server') || '';
 // (state declared near the top so first paint can read `online` safely)
 
+/* The connection indicator and the betting countdown are not shown in the
+   panel any more — an operator shell owns that chrome. The socket handlers
+   still call these on every state change, so they degrade to no-ops rather
+   than throwing on a missing element. Re-add the markup and they light up
+   again with no further changes. */
 function setNet(state, label){
-  const d = $('netDot');
-  d.className = 'dot' + (state === 'on' ? ' on' : state === 'off' ? ' off' : '');
-  $('netLabel').textContent = label;
+  const d = $('netDot'), l = $('netLabel');
+  if (d) d.className = 'dot' + (state === 'on' ? ' on' : state === 'off' ? ' off' : '');
+  if (l) l.textContent = label;
+}
+
+function setTimer(text){
+  const t = $('timer');
+  if (t) t.textContent = text;
 }
 
 function sysMsg(text){
@@ -717,7 +725,7 @@ function connect(){
     sysMsg(`This build runs sim ${d.client}, the server runs ${d.server}. Reload to get the current client.`);
   });
 
-  sock.on('disconnect', () => { online = false; setNet('off', 'Disconnected'); $('timer').textContent = '—'; });
+  sock.on('disconnect', () => { online = false; setNet('off', 'Disconnected'); setTimer('—'); });
 
   sock.on('hello', d => {
     srvConfig = d.config;
@@ -738,7 +746,7 @@ function connect(){
   sock.on('round:start', d => {
     betLocked = true;
     $('btnSpin').disabled = true;
-    $('timer').textContent = 'running';
+    setTimer('running');
     playRound(d.seed);
   });
 
@@ -793,7 +801,7 @@ function onOpen(r){
 setInterval(() => {
   if (!online || betLocked) return;
   const left = Math.max(0, closesAt - Date.now());
-  $('timer').textContent = left ? (left / 1000).toFixed(1) + ' s' : 'closed';
+  setTimer(left ? (left / 1000).toFixed(1) + ' s' : 'closed');
 }, 100);
 
 /* Plays the animation from the server's seed. The winner comes out of the
