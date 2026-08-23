@@ -19,8 +19,7 @@
   @media(max-width:900px){.wrap{grid-template-columns:1fr}}
 
   h1{font-family:var(--cond);font-size:22px;letter-spacing:.16em;text-transform:uppercase;
-     margin:0 0 2px;font-weight:700}
-  .sub{color:var(--mut);font-size:12px;margin-bottom:14px}
+     margin:0 0 12px;font-weight:700}
 
   .stage{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px;position:relative}
   canvas{width:100%;display:block;border-radius:8px}
@@ -70,7 +69,6 @@
         background:#1A2450;color:var(--mut);border:1px solid transparent;user-select:none;line-height:1.3}
   .chip.on{background:var(--gold);color:#14183a;font-weight:700}
   .chip.won{background:var(--mint);color:#0A1024;font-weight:700}
-  .chip.full{opacity:.35;cursor:not-allowed}
   button.mode.active{background:var(--gold);color:#14183a;border-color:transparent}
   #picked{margin-top:8px;font-size:11px;color:var(--mut);line-height:1.6;
           max-height:78px;overflow:auto}
@@ -140,7 +138,7 @@
           <input id="fSeed" type="text" placeholder="auto">
         </div>
       </div>
-      <label>Bet mode — how many flags</label>
+      <label>Quick pick — random flags</label>
       <div class="quick">
         <button class="ghost sm mode" data-mode="1">1</button>
         <button class="ghost sm mode" data-mode="8">8</button>
@@ -161,7 +159,6 @@
       <div class="kv"><span>Payout if hit</span><b id="oWin">—</b></div>
       <div class="kv"><span>Net if hit</span><b id="oNet">—</b></div>
       <div class="kv"><span>Expected loss</span><b id="oEv">—</b></div>
-      <div class="kv"><span>Slip RTP</span><b id="oRtp">—</b></div>
       <div style="margin-top:12px"><button id="btnSpin">Run round</button></div>
       <div style="margin-top:8px"><button id="btnSkip" class="ghost">Skip animation</button></div>
     </div>
@@ -299,10 +296,10 @@ preloadFlags();
 
 const NAMES = {"AF":"Afghanistan","AL":"Albania","DZ":"Algeria","AD":"Andorra","AO":"Angola","AG":"Antigua and Barbuda","AR":"Argentina","AM":"Armenia","AU":"Australia","AT":"Austria","AZ":"Azerbaijan","BS":"Bahamas","BH":"Bahrain","BD":"Bangladesh","BB":"Barbados","BY":"Belarus","BE":"Belgium","BZ":"Belize","BJ":"Benin","BT":"Bhutan","BO":"Bolivia","BA":"Bosnia and Herzegovina","BW":"Botswana","BR":"Brazil","BN":"Brunei","BG":"Bulgaria","BF":"Burkina Faso","BI":"Burundi","CV":"Cabo Verde","KH":"Cambodia","CM":"Cameroon","CA":"Canada","CF":"Central African Republic","TD":"Chad","CL":"Chile","CN":"China","CO":"Colombia","KM":"Comoros","CG":"Congo","CD":"DR Congo","CR":"Costa Rica","CI":"Ivory Coast","HR":"Croatia","CU":"Cuba","CY":"Cyprus","CZ":"Czechia","DK":"Denmark","DJ":"Djibouti","DM":"Dominica","DO":"Dominican Republic","EC":"Ecuador","EG":"Egypt","SV":"El Salvador","GQ":"Equatorial Guinea","ER":"Eritrea","EE":"Estonia","SZ":"Eswatini","ET":"Ethiopia","FJ":"Fiji","FI":"Finland","FR":"France","GA":"Gabon","GM":"Gambia","GE":"Georgia","DE":"Germany","GH":"Ghana","GR":"Greece","GD":"Grenada","GT":"Guatemala","GN":"Guinea","GW":"Guinea-Bissau","GY":"Guyana","HT":"Haiti","HN":"Honduras","HU":"Hungary","IS":"Iceland","IN":"India","ID":"Indonesia","IR":"Iran","IQ":"Iraq","IE":"Ireland","IL":"Israel","IT":"Italy","JM":"Jamaica","JP":"Japan","JO":"Jordan","KZ":"Kazakhstan","KE":"Kenya","KI":"Kiribati","KP":"North Korea","KR":"South Korea","KW":"Kuwait","KG":"Kyrgyzstan","LA":"Laos","LV":"Latvia","LB":"Lebanon","LS":"Lesotho","LR":"Liberia","LY":"Libya","LI":"Liechtenstein","LT":"Lithuania","LU":"Luxembourg","MG":"Madagascar","MW":"Malawi","MY":"Malaysia","MV":"Maldives","ML":"Mali","MT":"Malta","MH":"Marshall Islands","MR":"Mauritania","MU":"Mauritius","MX":"Mexico","FM":"Micronesia","MD":"Moldova","MC":"Monaco","MN":"Mongolia","ME":"Montenegro","MA":"Morocco","MZ":"Mozambique","MM":"Myanmar","NA":"Namibia","NR":"Nauru","NP":"Nepal","NL":"Netherlands","NZ":"New Zealand","NI":"Nicaragua","NE":"Niger","NG":"Nigeria","MK":"North Macedonia","NO":"Norway","OM":"Oman","PK":"Pakistan","PW":"Palau","PS":"Palestine","PA":"Panama","PG":"Papua New Guinea","PY":"Paraguay","PE":"Peru","PH":"Philippines","PL":"Poland","PT":"Portugal","QA":"Qatar","RO":"Romania","RU":"Russia","RW":"Rwanda","KN":"Saint Kitts and Nevis","LC":"Saint Lucia","VC":"Saint Vincent and the Grenadines","WS":"Samoa","SM":"San Marino","ST":"Sao Tome and Principe","SA":"Saudi Arabia","SN":"Senegal","RS":"Serbia","SC":"Seychelles","SL":"Sierra Leone","SG":"Singapore","SK":"Slovakia","SI":"Slovenia","SB":"Solomon Islands","SO":"Somalia","ZA":"South Africa","SS":"South Sudan","ES":"Spain","LK":"Sri Lanka","SD":"Sudan","SR":"Suriname","SE":"Sweden","CH":"Switzerland","SY":"Syria","TJ":"Tajikistan","TZ":"Tanzania","TH":"Thailand","TL":"Timor-Leste","TG":"Togo","TO":"Tonga","TT":"Trinidad and Tobago","TN":"Tunisia","TR":"Turkey","TM":"Turkmenistan","TV":"Tuvalu","UG":"Uganda","UA":"Ukraine","AE":"United Arab Emirates","GB":"United Kingdom","US":"United States","UY":"Uruguay","UZ":"Uzbekistan","VU":"Vanuatu","VA":"Vatican City","VE":"Venezuela","VN":"Vietnam","YE":"Yemen","ZM":"Zambia","ZW":"Zimbabwe"};
 
-/* Coverage is not free-form. Only these seven bet modes exist, matching the
-   seven books published to the RGS. A slip with 7 or 9 flags has no book
-   behind it, so the round cannot be run at all — the UI enforces that here
-   and the server enforces it again on its own. */
+/* The only coverages that have a book published to the RGS. The player may
+   build a slip by hand in any order they like, but the number of flags on it
+   has to land on one of these before the round can be paid out. The quick-pick
+   buttons are a convenience on top of that rule, not the rule itself. */
 const MODES = [1, 8, 17, 28, 53, 88, 98];
 
 /* Fixed, not a player-facing control. The edge belongs in the game rules and
@@ -315,9 +312,25 @@ const HOUSE_EDGE = 4;
    which is exactly why the arena came up blank. */
 let sock = null, online = false, srvConfig = null, betLocked = false, closesAt = 0;
 let myId = null;
-let betMode = 1;
 
 let picks = new Set();
+
+/* Which of the seven counts are reachable at the current field size. With
+   fewer than 98 flags in play, the larger books simply cannot be filled. */
+function validCounts(n){ return MODES.filter(m => m <= n); }
+
+/* Uniform sample without replacement. The old loop added random indices until
+   the set was big enough, which degenerates badly as the count approaches the
+   field size — asking for 98 of 98 would spin for a long time. */
+function randomPicks(k, n){
+  k = Math.max(0, Math.min(k, n));
+  const idx = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--){
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+  }
+  return new Set(idx.slice(0, k));
+}
 
 /* Deterministic colour per country, used until an image arrives or if the
    CDN fails entirely. */
@@ -337,9 +350,8 @@ function buildFlags(n){
     while (flags.length < n) flags.push(ISO[flags.length % ISO.length]);
   }
   for (const i of [...picks]) if (i >= n) picks.delete(i);
-  const full = picks.size >= betMode;
   $('chips').innerHTML = flags.map((c,i) =>
-    `<span class="chip${picks.has(i)?' on':(full?' full':'')}" data-i="${i}" ` +
+    `<span class="chip${picks.has(i)?' on':''}" data-i="${i}" ` +
     `title="${NAMES[c] || c}">` +
     `<img class="fi" src="${FLAG_CDN}${c.toLowerCase()}.png" alt="" loading="lazy" ` +
     `onerror="this.style.display='none'">${c}</span>`
@@ -358,19 +370,36 @@ function renderPicked(){
   box.innerHTML = list;
 }
 
-/* The Run button stays disabled unless the slip holds exactly the mode's
-   count. Seven or nine flags is not a bet that exists. */
+/* Selection itself is free — click whatever you want. The Run button is what
+   enforces the rule: the slip has to hold one of the seven payable counts.
+   Anything else has no book behind it and cannot be settled. */
 function checkSlip(){
-  const need = betMode, have = picks.size;
+  const n = clampN(), have = picks.size, valid = validCounts(n);
+  const ok = valid.includes(have);
   const note = $('modeNote'), btn = $('btnSpin');
-  const ok = have === need;
+
   if (note){
-    note.innerHTML = ok
-      ? `<span class="ok">Ready — ${need} flag${need>1?'s':''} selected</span>`
-      : have < need
-        ? `Select ${need - have} more (mode: ${need} flag${need>1?'s':''})`
-        : `Too many — remove ${have - need}`;
+    if (ok){
+      note.innerHTML = `<span class="ok">Ready — ${have} flag${have>1?'s':''} selected</span>`;
+    } else if (!have){
+      note.innerHTML = `Pick any flags you like, or tap a number for a random set. ` +
+                       `Payable counts: ${valid.join(', ')}.`;
+    } else {
+      const up   = valid.find(m => m > have);
+      const down = [...valid].reverse().find(m => m < have);
+      const hint = [ up ? `add ${up - have}` : null,
+                     down ? `remove ${have - down}` : null ].filter(Boolean).join(' or ');
+      note.innerHTML = `<span class="bad">${have} selected — not a payable count.</span>` +
+                       (hint ? ` ${hint}.` : '');
+    }
   }
+
+  document.querySelectorAll('.mode').forEach(x => {
+    const m = +x.dataset.mode;
+    x.disabled = m > n;
+    x.classList.toggle('active', ok && m === have);
+  });
+
   if (btn && !online) btn.disabled = !ok;
   return ok;
 }
@@ -382,7 +411,7 @@ function markWinner(w){
 
 /* Every picked flag is its own independent bet at the single-flag odds.
    Coverage does not change the odds, it changes how much is staked. Each
-   flag carries the same edge, so slip RTP is 96% at any coverage. */
+   flag carries the same edge, so the return is the same at any coverage. */
 function refreshOdds(){
   const n = clampN(), e = HOUSE_EDGE;
   const per = Math.max(0, parseFloat($('fBet').value) || 0);
@@ -400,7 +429,6 @@ function refreshOdds(){
     ? `<span class="${net>=0?'ok':'bad'}">${net>=0?'+':''}${net.toFixed(2)}</span>` : '—';
   const ev = stake - p*payout;                    // average loss per round
   $('oEv').textContent = k ? '−' + ev.toFixed(2) : '—';
-  $('oRtp').textContent = stake ? (p*payout/stake*100).toFixed(2) + ' %' : '—';
   $('hOdds').textContent = o.toFixed(2);
   $('hTotal').textContent = n;
   renderPicked();
@@ -488,8 +516,9 @@ function spin(skipAnim){
   if (anim) return;
   const n = clampN();
   const sel = [...picks];
-  if (sel.length !== betMode){
-    $('hState').innerHTML = `<span class="bad">bet mode is ${betMode} flags, slip has ${sel.length}</span>`;
+  if (!validCounts(n).includes(sel.length)){
+    $('hState').innerHTML = `<span class="bad">${sel.length} flags is not a payable count — ` +
+                            `use ${validCounts(n).join(', ')}</span>`;
     return;
   }
   const per = Math.max(0, parseFloat($('fBet').value) || 0);
@@ -542,44 +571,49 @@ function spin(skipAnim){
   if (id === 'fCount') buildFlags(clampN());
   refreshOdds();
 }));
+
+/* Free-form: add or remove any flag. Nothing here caps the slip. */
 $('chips').addEventListener('click', ev => {
   const el = ev.target.closest('.chip');
   if (!el) return;
   const i = +el.dataset.i;
-  if (picks.has(i)) {
-    picks.delete(i);
-  } else {
-    // Never let the slip exceed the mode: a coverage with no book behind it
-    // could not be paid out.
-    if (picks.size >= betMode) return;
-    picks.add(i);
-  }
+  if (picks.has(i)) picks.delete(i); else picks.add(i);
   el.classList.toggle('on', picks.has(i));
   el.classList.remove('won');
   refreshOdds();
 });
 
+/* A number is an action, not a mode: it replaces the slip with that many
+   random flags. Ignoring the buttons entirely is a perfectly valid way to
+   play — hand-pick whatever you want, as long as the count lands on a book. */
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
-  betMode = +b.dataset.mode;
-  picks.clear();
-  document.querySelectorAll('.mode').forEach(x =>
-    x.classList.toggle('active', +x.dataset.mode === betMode));
-  buildFlags(clampN()); refreshOdds();
+  const n = clampN(), k = +b.dataset.mode;
+  if (k > n) return;
+  picks = randomPicks(k, n);
+  buildFlags(n); refreshOdds();
 }));
 
+/* Re-roll: keeps the count the player already has if it is payable, otherwise
+   picks one of the seven at random and fills that. */
 document.querySelectorAll('[data-fill]').forEach(b => b.addEventListener('click', () => {
   const n = clampN();
-  picks.clear();
-  if (b.dataset.fill === 'random')
-    while (picks.size < Math.min(n, betMode)) picks.add((Math.random()*n)|0);
+  if (b.dataset.fill === 'clear'){
+    picks.clear();
+  } else {
+    const valid = validCounts(n);
+    if (!valid.length){ picks.clear(); }
+    else {
+      const cur = picks.size;
+      const k = valid.includes(cur) ? cur : valid[(Math.random() * valid.length) | 0];
+      picks = randomPicks(k, n);
+    }
+  }
   buildFlags(n); refreshOdds();
 }));
 
 $('btnSpin').addEventListener('click', () => online ? sendBet() : spin(false));
 $('btnSkip').addEventListener('click', () => { if (!online) spin(true); });
 
-document.querySelectorAll('.mode').forEach(x =>
-  x.classList.toggle('active', +x.dataset.mode === betMode));
 buildFlags(clampN()); refreshOdds(); refreshBal();
 round = new Round(12345, clampN()); round.trackEscapes = true;
 $('hAlive').textContent = round.aliveCount;
@@ -739,12 +773,14 @@ function playRound(seed){
 
 function sendBet(){
   const perFlag = Math.max(0, parseFloat($('fBet').value) || 0);
-  if (picks.size !== betMode){
-    $('hState').innerHTML = `<span class="bad">bet mode is ${betMode} flags, slip has ${picks.size}</span>`;
+  const n = srvConfig ? srvConfig.flags : clampN();
+  if (!validCounts(n).includes(picks.size)){
+    $('hState').innerHTML = `<span class="bad">${picks.size} flags is not a payable count — ` +
+                            `use ${validCounts(n).join(', ')}</span>`;
     return;
   }
   $('btnSpin').disabled = true;
-  sock.emit('bet', { perFlag, betMode, picks: [...picks] }, res => {
+  sock.emit('bet', { perFlag, betMode: picks.size, picks: [...picks] }, res => {
     if (res && res.ok){
       bal = res.balance; refreshBal();
       $('hState').innerHTML = `<span class="ok">bet placed — ${res.picks.length} flags</span>`;
